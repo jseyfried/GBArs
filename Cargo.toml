@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["Evrey <evrey@hackish.codes>"]
 
 [dependencies]
+log = "^0.3"
+argparse = "^0.2"
