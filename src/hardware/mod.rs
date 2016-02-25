@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::io;
 
-use self::cpu::Arm7Tdmi;
+use self::cpu::{Arm7Tdmi, IoRegisters};
 pub use self::gamepak::*;
 
 
@@ -18,6 +18,9 @@ pub struct Gba {
     cpu: Arm7Tdmi,
     
     //
+    ioregs: IoRegisters,
+    
+    //
     game_pak: GamePak,
 }
 
@@ -26,6 +29,7 @@ impl Gba {
     pub fn new() -> Gba {
         Gba {
             cpu: Arm7Tdmi::new(),
+            ioregs: IoRegisters::new(),
             game_pak: GamePak::new(),
         }
     }
