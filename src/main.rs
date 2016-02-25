@@ -1,6 +1,6 @@
 
 
-#![feature(box_syntax)]
+#![feature(box_syntax, associated_consts)]
 
 #[macro_use]
 extern crate log;
@@ -31,7 +31,6 @@ impl Default for CmdLineArgs {
             rom_file_path: None,
             log_file_path: PathBuf::from("./rsGBA.log"),
             verbose: false,
-            pretty: true,
         }
     }
 }
@@ -57,10 +56,20 @@ fn main() {
         parser.parse_args_or_exit();
     }
     
-    // Handle command line arguments.
+    // Configure logging.
     {
         let p = args.log_file_path.as_path();
         logger::init_with(&p, args.verbose).unwrap();
-        info!("Logging to file `{}`.\nTest.", p.to_str().unwrap_or("<?>"));
+        info!("Logging to file `{}`.\nTest.", p.display());
+    }
+    
+    // Prepare the GBA.
+    let mut gba = hardware::Gba::new();
+    
+    // Load ROM now if a path is given.
+    if let Some(fp) = args.rom_file_path {
+        gba.load_rom_from_file(fp.as_path()).unwrap();
+        info!("Loaded the game {}.", gba.rom_header());
+        debug!("Header valid? {}", gba.rom_header().complement_check());
     }
 }
