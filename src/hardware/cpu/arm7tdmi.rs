@@ -105,7 +105,7 @@ pub struct CPSR(i32);
 
 impl CPSR {
     /// Used to mask reserved bits away.
-    pub const NON_RESERVED_MASK: i32 = 0b11110000_00000000_00000000_11111111;
+    pub const NON_RESERVED_MASK: i32 = 0b11110000_00000000_00000000_11111111_u32 as i32;
     //                                   NZCV                       IFTMMMMM
     
     /// Sign flag bit.

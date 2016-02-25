@@ -1,13 +1,16 @@
 
+#![allow(dead_code)]
+
 use std::path::Path;
 use std::io;
 
 use self::cpu::Arm7Tdmi;
-pub use self::rom::*;
+pub use self::gamepak::*;
 
 
 mod cpu;
-pub mod rom;
+mod memory;
+pub mod gamepak;
 
 
 pub struct Gba {
@@ -15,7 +18,7 @@ pub struct Gba {
     cpu: Arm7Tdmi,
     
     //
-    rom: Rom,
+    game_pak: GamePak,
 }
 
 impl Gba {
@@ -23,13 +26,13 @@ impl Gba {
     pub fn new() -> Gba {
         Gba {
             cpu: Arm7Tdmi::new(),
-            rom: Rom::new(),
+            game_pak: GamePak::new(),
         }
     }
     
     //
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        self.rom.load_from_file(fp)
+        self.game_pak.load_rom_from_file(fp)
     }
     
     /// Get a handle for the ROM's header.
@@ -40,7 +43,7 @@ impl Gba {
     ///
     /// # Returns
     /// A ROM header handle.
-    pub fn rom_header<'a>(&'a self) -> RomHeader<'a> {
-        self.rom.header()
+    pub fn rom_header<'a>(&'a self) -> GamePakRomHeader<'a> {
+        self.game_pak.header()
     }
 }

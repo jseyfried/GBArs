@@ -1,10 +1,13 @@
 
 
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 #![feature(box_syntax, associated_consts)]
 
 #[macro_use]
 extern crate log;
 extern crate argparse;
+extern crate byteorder;
 
 use argparse::{ArgumentParser, Print, Parse, ParseOption, StoreTrue};
 use std::path::PathBuf;
