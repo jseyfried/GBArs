@@ -98,8 +98,8 @@ pub enum ArmOpcode {
     MLAL, // RdHi_RdLo = (Rm * Rs) + RdHi_RdLo
     
     // Load/Store Instructions.
-    LDR,  // Load word.
-    STR,  // Store word.
+    LDRW, // Load word.
+    STRW, // Store word.
     LDRH, // Load signed/unsigned halfword.
     STRH, // Store signed/unsigned halfword.
     LDRB, // Load signed/unsigned byte.
@@ -112,6 +112,13 @@ pub enum ArmOpcode {
     // PSR transfer.
     MRS,
     MSR,
+    
+    // Swap.
+    SWPW,
+    SWPB,
+    
+    // Software Interrupt
+    SWI,
 }
 
 impl ArmOpcode {
@@ -202,9 +209,10 @@ pub struct ArmInstruction {
     shift_from_reg: bool,
     signed: bool,
     set_flags: bool,
-    post_indexed: bool,
+    pre_indexed: bool,
     auto_increment: bool,
     force_usermode: bool,
+    sub_offset_reg: bool,
     spsr: bool,
 }
 
@@ -224,9 +232,10 @@ impl ArmInstruction {
             shift_from_reg: false,
             signed:         false,
             set_flags:      false,
-            post_indexed:   false,
+            pre_indexed:    false,
             auto_increment: false,
             force_usermode: false,
+            sub_offset_reg: false,
             spsr:           false,
         }
     }
@@ -257,7 +266,6 @@ impl ArmInstruction {
         }
         // Data processing?
         else if (raw & 0x0C000000_u32) == 0 {
-            // Way too complex for one function.
             tmp.decode_data_processing(raw);
         }
         // MRS instruction?
@@ -281,16 +289,34 @@ impl ArmInstruction {
         }
         // Multiply or Multiply Accumulate? Long?
         else if (raw & 0x0F0000F0_u32) == 0x00000090_u32 {
-            // Again quite a bit of code.
-            // And a possible bug, as MLA/MUL instructions
+            // Possible bug, as MLA/MUL instructions
             // with a set sign bit will be accepted here.
             tmp.decode_multiplication(raw);
         }
         // Single data transfer?
-        else if (raw & 0x1_u32) == 0x0_u32 {
-            //
-            unimplemented!();
+        else if (raw & 0x0C000000_u32) == 0x04000000_u32 {
+            tmp.decode_single_data_transfer(raw);
         }
+        // Single Swap?
+        else if (raw & 0x0FB00FF0_u32) == 0x01000090_u32 {
+            tmp.Rn = ((raw >> 16) & 0b1111) as u8;
+            tmp.Rd = ((raw >> 12) & 0b1111) as u8;
+            tmp.Rm = ((raw >>  0) & 0b1111) as u8;
+            tmp.opcode = if (raw & (1 << 22)) != 0 { ArmOpcode::SWPB } else { ArmOpcode::SWPW };
+        }
+        // Halfword or signed data transfer?
+        else if (raw & 0x0E000090_u32) == 0x00000090_u32 {
+            tmp.decode_halfword_and_signed_data_transfer(raw);
+        }
+        // Block data transfer?
+        else if (raw & 0x0E000000_u32) == 0x08000000_u32 {
+            tmp.decode_block_data_transfer(raw);
+        }
+        // Software Interrupt?
+        else if (raw & 0x0F000000_u32) == 0x0F000000_u32 {
+            tmp.opcode = ArmOpcode::SWI;
+        }
+        // TODO co-processor and undefined
         // Undefined or unimplemented opcode.
         else {
             tmp.immediate = raw as i32;
@@ -302,6 +328,19 @@ impl ArmInstruction {
         tmp
     }
     
+    
+    #[allow(non_snake_case)]
+    fn decode_Rm_shifting(&mut self, raw: u32) {
+        self.Rm = (raw & 0b1111) as u8;
+        let sh: u8 = if (raw & 0x10) == 0 {
+            ((raw >> 7) & 0x1F) as u8
+        } else {
+            self.Rs = ((raw >> 8) & 0b1111) as u8;
+            self.shift_from_reg = true;
+            0_u8
+        };
+        self.shift_op = ArmBarrelShifterOp::from_bits((raw >> 5) as u8, sh);
+    }
     
     fn decode_data_processing(&mut self, raw: u32) {
         // Decode the obvious parameters.
@@ -315,15 +354,7 @@ impl ArmInstruction {
             let bits = ((raw >> 8) & 0b1111) * 2;
             self.immediate = (raw & 0xFF).rotate_right(bits) as i32;
         } else {
-            self.Rm = (raw & 0b1111) as u8;
-            let sh: u8 = if (raw & 0x10) == 0 {
-                ((raw >> 7) & 0x1F) as u8
-            } else {
-                self.Rs = ((raw >> 8) & 0b1111) as u8;
-                self.shift_from_reg = true;
-                0_u8
-            };
-            self.shift_op = ArmBarrelShifterOp::from_bits((raw >> 5) as u8, sh);
+            self.decode_Rm_shifting(raw);
         }
         
         // Decode the opcode.
@@ -350,5 +381,87 @@ impl ArmInstruction {
             if self.signed { warn!("MLA/MUL sign bit should be zero.") };
             if accum { ArmOpcode::MLA } else { ArmOpcode::MUL }
         };
+    }
+    
+    fn decode_single_data_transfer(&mut self, raw: u32) {
+        // Decode flags.
+        self.has_immediate  = (raw & (1 << 25)) == 0;
+        self.pre_indexed    = (raw & (1 << 24)) != 0;
+        let up              = (raw & (1 << 23)) != 0;
+        let byte            = (raw & (1 << 22)) != 0;
+        self.auto_increment = (raw & (1 << 21)) != 0;
+        let load            = (raw & (1 << 20)) != 0;
+        
+        // Decode operands.
+        self.Rn = ((raw >> 16) & 0b1111) as u8;
+        self.Rd = ((raw >> 12) & 0b1111) as u8;
+        
+        // Decode offset.
+        if self.has_immediate {
+            let x = (raw & 0x0FFF) as i32;
+            self.immediate = if up { x } else { -x };
+        } else {
+            self.decode_Rm_shifting(raw);
+        }
+        
+        // And decode opcode.
+        self.opcode = match (byte, load) {
+            (false, false) => ArmOpcode::STRW,
+            (false, true ) => ArmOpcode::LDRW,
+            (true,  false) => ArmOpcode::STRB, // Unsigned load.
+            (true,  true ) => ArmOpcode::LDRB, // Unsigned load.
+        };
+    }
+    
+    fn decode_halfword_and_signed_data_transfer(&mut self, raw: u32) {
+        // Decode flags.
+        self.pre_indexed    = (raw & (1 << 24)) != 0;
+        let up              = (raw & (1 << 23)) != 0;
+        let offset          = (raw & (1 << 22)) != 0;
+        self.auto_increment = (raw & (1 << 21)) != 0;
+        let load            = (raw & (1 << 20)) != 0;
+        self.signed         = (raw & (1 <<  6)) != 0;
+        
+        // Decode operands.
+        self.Rn = ((raw >> 16) & 0b1111) as u8;
+        self.Rd = ((raw >> 12) & 0b1111) as u8;
+        let ohi = ((raw >>  4) & 0x00F0) as u8;
+        let olo = ((raw >>  0) & 0b1111) as u8;
+        
+        // Load offset (register).
+        if (!offset) & (ohi != 0) { warn!("Non-zero offset in non-offset halfword data transfer."); }
+        if offset {
+            self.immediate = (ohi | olo) as i32;
+            if !up { self.immediate = -self.immediate; }
+            self.has_immediate = true;
+        } else {
+            self.Rm = olo;
+            self.sub_offset_reg = !up;
+        }
+        
+        // Decode opcode.
+        self.opcode = match (raw >> 5) & 0b11 {
+            0     => unimplemented!(), // TODO SWP instruction? Wtf?
+            2     => if load { ArmOpcode::LDRB } else { ArmOpcode::STRB },
+            1 | 3 => if load { ArmOpcode::LDRH } else { ArmOpcode::STRH },
+            _ => unreachable!(),
+        };
+    }
+    
+    fn decode_block_data_transfer(&mut self, raw: u32) {
+        // Decode flags.
+        self.pre_indexed    = (raw & (1 << 24)) != 0;
+        self.sub_offset_reg = (raw & (1 << 23)) == 0; // Decrement addressing.
+        self.force_usermode = (raw & (1 << 22)) != 0;
+        self.auto_increment = (raw & (1 << 21)) != 0;
+        let load            = (raw & (1 << 20)) != 0;
+        
+        // Decode operand and register list.
+        self.Rn        = ((raw >> 16) & 0b1111) as u8;
+        self.immediate = ((raw >>  0) & 0xFFFF) as i32;
+        self.has_immediate = true;
+        
+        // Decode opcode.
+        self.opcode = if load { ArmOpcode::LDM } else { ArmOpcode::STM };
     }
 }
