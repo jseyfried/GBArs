@@ -119,6 +119,9 @@ pub enum ArmOpcode {
     
     // Software Interrupt
     SWI,
+    
+    // Co-Processor stuff.
+    CDP(u8), // Co-processor Data oPerations with opcode (u8).
 }
 
 impl ArmOpcode {
@@ -193,6 +196,86 @@ impl ArmBarrelShifterOp {
 }
 
 
+/*
+    Instruction Flags:
+        .... ....  .... ....  .... ....  .... ....
+        COND                                  RegM | BX #map: RegN => RegM
+        COND    F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL
+        COND   Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op4(xxxx)...
+               0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
+               0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
+               1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
+        COND        P         RegD                 | MRS
+        COND        P                         RegM | MSR by RegM
+        COND   I    P              shft  shft shft | MSR by Immediate...
+               0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
+               0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
+               1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
+        COND         AS RegN  RegD RegS       RegM | MUL/MLA #map: RegN <=> RegD
+        COND        UAS RegN  RegD RegS       RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
+        COND   I+  -BWL RegN  RegD offs  offs offs | LDR/STR
+        COND    +  - WL RegN  RegD        xx  RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
+        COND    +  - WL RegN  RegD imm_   xx  imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
+        COND    +  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
+        COND        B   RegN  RegD            RegM | SWP
+        COND       imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
+        COND       CPOP RegN  RegD CPID  xxx  RegM | CDP with CoCPU Op4(CPOP) and CP Info xxx
+        COND       yyyL CprN  RegD CPID  xxx  CprM | MRC/MCR with CoCPU Op3(yyy) and CP Info xxx
+        COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
+        COND    ?  ???? ????  ???? ????  ???  ???? | Unknown Instruction
+        
+    Full Instructions:
+        .... ....  .... ....  .... ....  .... ....
+        COND 0001  0010 1111  1111 1111  0001 RegM | BX #map: RegN => RegM
+        COND 101F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL with signed offset
+        COND 00Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op(xxxx)
+        COND 0001  0P00 1111  RegD 0000  0000 0000 | MRS
+        COND 0001  0P10 1001  1111 0000  0000 RegM | MSR by RegM
+        COND 00I1  0P10 1000  1111 shft  shft shft | MSR by imm
+        COND 0000  00AS RegN  RegD RegS  1001 RegM | MUL/MLA #map: RegN <=> RegD
+        COND 0000  1UAS RegN  RegD RegS  1001 RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
+        COND 01I+  -BWL RegN  RegD offs  offs offs | LDR/STR
+        COND 000+  -0WL RegN  RegD 0000  1xx1 RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
+        COND 000+  -1WL RegN  RegD imm_  1xx1 imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
+        COND 100+  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
+        COND 0001  0B00 RegN  RegD 0000  1001 RegM | SWP
+        COND 1111  imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
+        COND 1110  CPOP CprN  CprD CPID  xxx0 CprM | CDP with CoCPU Op4 CPOP and CP Info xxx
+        COND 1110  yyyL CprN  RegD CPID  xxx1 CprM | MRC/MCR with CoCPU Op3 yyy and CP Info xxx
+        COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
+        COND 011?  ???? ????  ???? ????  ???1 ???? | Unknown Instruction
+    
+    Bit Flags:
+        I: 1=shftIsRegister,  0=shftIsImmediate
+        F: 1=BranchWithLink,  0=BranchWithoutLink
+        +: 1=PreIndexing,     0=PostIndexing
+        -: 1=AddOffset,       0=SubtractOffset
+        P: 1=SPSR,            0=CPSR
+        U: 1=Signed,          0=Unsigned
+        B: 1=TransferByte,    0=TransferWord
+        R: 1=ForceUserMode,   0=NoForceUserMode
+        N: 1=TransferAllRegs, 0=TransferSingleReg
+        A: 1=Accumulate,      0=DoNotAccumulate
+        W: 1=AutoIncrement,   0=NoWriteBack
+        S: 1=SetFlags,        0=DoNotSetFlags
+        L: 1=Load,            0=Store
+        
+    Shift format:
+        I=0: shft shft shft
+             _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
+             RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
+             
+        I=1: shft shft shft
+             xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
+    
+    Offset format:
+        I=0: offs offs offs
+             imm_ imm_ imm_ // Immediate unsigned offset.
+        
+        I=1: offs offs offs
+             _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
+             RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
+*/
 // TODO
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_snake_case)]
@@ -205,6 +288,7 @@ pub struct ArmInstruction {
     Rn: u8,
     Rs: u8,
     Rm: u8,
+    is_data_processing: bool,
     has_immediate: bool,
     shift_from_reg: bool,
     signed: bool,
@@ -220,23 +304,24 @@ impl ArmInstruction {
     /// Creates an invalid instruction.
     pub fn new() -> ArmInstruction {
         ArmInstruction {
-            immediate:      0,
-            cond:           ArmCondition::AL,
-            opcode:         ArmOpcode::Invalid,
-            shift_op:       ArmBarrelShifterOp::LSL(0),
-            Rd:             0,
-            Rn:             0,
-            Rs:             0,
-            Rm:             0,
-            has_immediate:  false,
-            shift_from_reg: false,
-            signed:         false,
-            set_flags:      false,
-            pre_indexed:    false,
-            auto_increment: false,
-            force_usermode: false,
-            sub_offset_reg: false,
-            spsr:           false,
+            immediate:          0,
+            cond:               ArmCondition::AL,
+            opcode:             ArmOpcode::Invalid,
+            shift_op:           ArmBarrelShifterOp::LSL(0),
+            Rd:                 0,
+            Rn:                 0,
+            Rs:                 0,
+            Rm:                 0,
+            is_data_processing: false,
+            has_immediate:      false,
+            shift_from_reg:     false,
+            signed:             false,
+            set_flags:          false,
+            pre_indexed:        false,
+            auto_increment:     false,
+            force_usermode:     false,
+            sub_offset_reg:     false,
+            spsr:               false,
         }
     }
     
@@ -314,7 +399,14 @@ impl ArmInstruction {
         }
         // Software Interrupt?
         else if (raw & 0x0F000000_u32) == 0x0F000000_u32 {
-            tmp.opcode = ArmOpcode::SWI;
+            // Decode comment as well, in case I want to use it for... stuff?
+            tmp.immediate     = (raw & 0x00FFFFFF_u32) as i32;
+            tmp.has_immediate = true;
+            tmp.opcode        = ArmOpcode::SWI;
+        }
+        // Co-Processor data operations?
+        else if (raw & 0x0F000010_u32) == 0x0E000000_u32 {
+            tmp.decode_cp_data_op(raw);
         }
         // TODO co-processor and undefined
         // Undefined or unimplemented opcode.
@@ -343,6 +435,8 @@ impl ArmInstruction {
     }
     
     fn decode_data_processing(&mut self, raw: u32) {
+        self.is_data_processing = true;
+        
         // Decode the obvious parameters.
         self.has_immediate = (raw & (1 << 25)) != 0;
         self.set_flags     = (raw & (1 << 20)) != 0;
@@ -463,5 +557,20 @@ impl ArmInstruction {
         
         // Decode opcode.
         self.opcode = if load { ArmOpcode::LDM } else { ArmOpcode::STM };
+    }
+    
+    fn decode_cp_data_op(&mut self, raw: u32) {
+        // Decode registers.
+        self.Rn = ((raw >> 16) & 0b1111) as u8;
+        self.Rd = ((raw >> 12) & 0b1111) as u8;
+        self.Rm = ((raw >>  0) & 0b1111) as u8;
+        
+        // Decode information and CP#.
+        self.has_immediate = true;
+        self.immediate     = ((raw >> 8) & 0b1111) as u8; // Co-Processor number.
+        self.Rs            = ((raw >> 5) & 0b0111) as u8; // Co-Processor information.
+        
+        // Decode CP opcode.
+        self.opcode = ArmOpcode::CDP(((raw >> 20) & 0b1111) as u8);
     }
 }
