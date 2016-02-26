@@ -44,6 +44,7 @@ impl Mode {
 
 /// CPU exceptions.
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
 pub enum Exception {
     Reset,
     UndefinedInstruction,
@@ -95,6 +96,16 @@ impl Exception {
     #[inline(always)]
     pub fn disable_fiq_on_entry(self) -> bool {
         (self == Exception::Reset) | (self == Exception::FastInterrupt)
+    }
+    
+    /// Get the exception vector address.
+    ///
+    /// # Returns
+    /// A physical address to the exception's
+    /// vector entry.
+    #[inline(always)]
+    pub fn vector_address(self) -> u32 {
+        (self as u8 as u32) * 4
     }
 }
 
@@ -319,8 +330,12 @@ impl Arm7Tdmi {
     }
     
     /// Resets the CPU.
+    ///
+    /// The CPU starts up by setting few
+    /// register states and entering a
+    /// reset exception.
     pub fn reset(&mut self) {
-        self.gpr[Arm7Tdmi::PC] = 0xDEADBEEF; // TODO correct address
+        self.gpr[Arm7Tdmi::PC] = 0;
         
         self.cpsr = CPSR(
             (CPSR::MODE_SUPERVISOR)
@@ -366,6 +381,6 @@ impl Arm7Tdmi {
         self.cpsr.set_state(State::ARM);
         self.cpsr.disable_irq();
         if ex.disable_fiq_on_entry() { self.cpsr.disable_fiq(); }
-        self.gpr[Arm7Tdmi::PC] = 0xDEADBEEF; // TODO grab from exception vector
+        self.gpr[Arm7Tdmi::PC] = ex.vector_address() as i32;
     }
 }
