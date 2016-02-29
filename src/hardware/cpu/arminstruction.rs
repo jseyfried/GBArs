@@ -4,6 +4,7 @@ use std::mem;
 use std::fmt;
 
 use super::super::error::GbaError;
+use super::arm7tdmi::CPSR;
 
 
 /// The condition field of an ARM instruction.
@@ -26,6 +27,37 @@ pub enum ArmCondition {
     LE = 0b1101, // Z set or N distinct from V.  Less than or Equal to.
     AL = 0b1110, // ALways execute this instruction, i.e. no condition.
     NV = 0b1111, // Reserved.
+}
+
+impl ArmCondition {
+    /// Evaluates the condition field depending on the CPSR's state.
+    ///
+    /// # Params
+    /// - `cpsr`: The CPSR to inspect.
+    ///
+    /// # Returns
+    /// - `Ok`: `true` if the corresponding instruction should be executed, otherwise `false`.
+    /// - `Err`: The condition field is `NV`, which is reserved in ARM7TDMI.
+    pub fn check(self, cpsr: &CPSR) -> Result<bool, GbaError> {
+        match self {
+            ArmCondition::EQ => Ok( cpsr.Z() ),
+            ArmCondition::NE => Ok(!cpsr.Z() ),
+            ArmCondition::HS => Ok( cpsr.C() ),
+            ArmCondition::LO => Ok(!cpsr.C() ),
+            ArmCondition::MI => Ok( cpsr.N() ),
+            ArmCondition::PL => Ok(!cpsr.N() ),
+            ArmCondition::VS => Ok( cpsr.V() ),
+            ArmCondition::VC => Ok(!cpsr.V() ),
+            ArmCondition::HI => Ok( cpsr.C() & !cpsr.Z() ),
+            ArmCondition::LS => Ok(!cpsr.C() |  cpsr.Z() ),
+            ArmCondition::GE => Ok( cpsr.N() == cpsr.V() ),
+            ArmCondition::LT => Ok( cpsr.N() != cpsr.V() ),
+            ArmCondition::GT => Ok(!cpsr.Z() & (cpsr.N() == cpsr.V()) ),
+            ArmCondition::LE => Ok( cpsr.Z() | (cpsr.N() != cpsr.V()) ),
+            ArmCondition::AL => Ok( true ),
+            ArmCondition::NV => Err(GbaError::ReservedArmConditionNV),
+        }
+    }
 }
 
 impl fmt::Display for ArmCondition {

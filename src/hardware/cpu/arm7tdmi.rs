@@ -262,6 +262,30 @@ impl CPSR {
     pub fn enable_fiq(&mut self) {
         self.0 &= !(1 << CPSR::FIQ_DISABLE_BIT);
     }
+    
+    /// Gets the current state of the N bit.
+    #[allow(non_snake_case)]
+    pub fn N(self) -> bool {
+        0 != (self.0 & (1 << 31))
+    }
+    
+    /// Gets the current state of the Z bit.
+    #[allow(non_snake_case)]
+    pub fn Z(self) -> bool {
+        0 != (self.0 & (1 << 30))
+    }
+    
+    /// Gets the current state of the C bit.
+    #[allow(non_snake_case)]
+    pub fn C(self) -> bool {
+        0 != (self.0 & (1 << 29))
+    }
+    
+    /// Gets the current state of the V bit.
+    #[allow(non_snake_case)]
+    pub fn V(self) -> bool {
+        0 != (self.0 & (1 << 28))
+    }
 }
 
 
