@@ -58,7 +58,7 @@ A GBA emulator written in Rust.
 	
 	> Livecoding a Nintendo 64 emulator in Rust :D
 	
-	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube playlist containing recordings of Ferris' Rustendo64 streams.
+	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams.
 
 # License
 
