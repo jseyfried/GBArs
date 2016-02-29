@@ -28,7 +28,7 @@ pub enum Mode {
 
 impl Mode {
     /// Converts this mode into a CPSR bit pattern.
-    pub fn as_bits(self) -> i32 {
+    pub fn as_bits(self) -> u32 {
         match self {
             Mode::User       => CPSR::MODE_USER,
             Mode::FIQ        => CPSR::MODE_FIQ,
@@ -112,11 +112,11 @@ impl Exception {
 
 /// The Current Program Status Register.
 #[derive(PartialEq, Clone, Copy)]
-pub struct CPSR(i32);
+pub struct CPSR(u32);
 
 impl CPSR {
     /// Used to mask reserved bits away.
-    pub const NON_RESERVED_MASK: i32 = 0b11110000_00000000_00000000_11111111_u32 as i32;
+    pub const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
     //                                   NZCV                       IFTMMMMM
     
     /// Sign flag bit.
@@ -157,28 +157,28 @@ impl CPSR {
     /// Mode bits mask.
     ///
     /// Used to get the mode bits only.
-    pub const MODE_MASK: i32 = 0b0001_1111;
+    pub const MODE_MASK: u32 = 0b0001_1111;
     
     /// Bit pattern for user mode.
-    pub const MODE_USER: i32 = 0b1_0000;
+    pub const MODE_USER: u32 = 0b1_0000;
     
     /// Bit pattern for FIQ mode.
-    pub const MODE_FIQ: i32 = 0b1_0001;
+    pub const MODE_FIQ: u32 = 0b1_0001;
     
     /// Bit pattern for IRQ mode.
-    pub const MODE_IRQ: i32 = 0b1_0010;
+    pub const MODE_IRQ: u32 = 0b1_0010;
     
     /// Bit pattern for supervisor mode.
-    pub const MODE_SUPERVISOR: i32 = 0b1_0011;
+    pub const MODE_SUPERVISOR: u32 = 0b1_0011;
     
     /// Bit pattern for abort mode.
-    pub const MODE_ABORT: i32 = 0b1_0111;
+    pub const MODE_ABORT: u32 = 0b1_0111;
     
     /// Bit pattern for undefined mode.
-    pub const MODE_UNDEFINED: i32 = 0b1_1011;
+    pub const MODE_UNDEFINED: u32 = 0b1_1011;
     
     /// Bit pattern for system mode.
-    pub const MODE_SYSTEM: i32 = 0b1_1111;
+    pub const MODE_SYSTEM: u32 = 0b1_1111;
     
     
     /// Clears all reserved bits.
@@ -196,8 +196,8 @@ impl CPSR {
     /// //NZCV
     /// ```
     #[inline(always)]
-    pub fn condition_bits(&self) -> i32 {
-        ((self.0 as u32) >> CPSR::OVERFLOW_FLAG_BIT) as i32
+    pub fn condition_bits(&self) -> u32 {
+        (self.0 as u32) >> CPSR::OVERFLOW_FLAG_BIT
     }
     
     /// Converts the state bit to a state enum.
@@ -228,7 +228,7 @@ impl CPSR {
     #[inline(always)]
     pub fn set_state(&mut self, s: State) {
         self.0 &= !(1 << CPSR::STATE_BIT);
-        self.0 |= (s as u8 as i32) << CPSR::STATE_BIT;
+        self.0 |= (s as u8 as u32) << CPSR::STATE_BIT;
     }
     
     /// Sets or clears the mode bits
@@ -270,7 +270,7 @@ pub struct Arm7Tdmi {
     // Main register set.
     gpr: [i32; 16],
     cpsr: CPSR,
-    spsr: [i32; 7],
+    spsr: [u32; 7],
     
     // Extra details.
     nn: i32,

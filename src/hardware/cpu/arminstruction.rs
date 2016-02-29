@@ -7,53 +7,22 @@ use std::mem;
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum ArmCondition {
-    /// Z set. EQual.
-    EQ = 0b0000,
-    
-    /// Z clear. Not Equal.
-    NE = 0b0001,
-    
-    /// C set. Unsigned Higher or Same.
-    HS = 0b0010,
-    
-    /// C clear. Unsigned LOwer.
-    LO = 0b0011,
-    
-    /// N set. MInus, i.e. negative.
-    MI = 0b0100,
-    
-    /// N clear. PLus, i.e. positive or zero.
-    PL = 0b0101,
-    
-    /// V Set. Overflow.
-    VS = 0b0110,
-    
-    /// V Clear. No overflow.
-    VC = 0b0111,
-    
-    /// C set and Z clear. Unsigned HIgher.
-    HI = 0b1000,
-    
-    /// C clear or Z set. Unsigned Lower or Same.
-    LS = 0b1001,
-    
-    /// N equals V. Greater than or Equal to.
-    GE = 0b1010,
-    
-    /// N distinct from V. Less Than.
-    LT = 0b1011,
-    
-    /// Z clear and N equals V. Greater Than.
-    GT = 0b1100,
-    
-    /// Z set or N distinct from V. Less than or Equal to.
-    LE = 0b1101,
-    
-    /// ALways execute this instruction, i.e. no condition.
-    AL = 0b1110,
-    
-    /// Reserved.
-    NV = 0b1111,
+    EQ = 0b0000, // Z set. EQual.
+    NE = 0b0001, // Z clear. Not Equal.
+    HS = 0b0010, // C set. Unsigned Higher or Same.
+    LO = 0b0011, // C clear. Unsigned LOwer.
+    MI = 0b0100, // N set. MInus, i.e. negative.
+    PL = 0b0101, // N clear. PLus, i.e. positive or zero.
+    VS = 0b0110, // V Set. Overflow.
+    VC = 0b0111, // V Clear. No Overflow.
+    HI = 0b1000, // C set and Z clear. Unsigned HIgher.
+    LS = 0b1001, // C clear or Z set. Unsigned Lower or Same.
+    GE = 0b1010, // N equals V. Greater than or Equal to.
+    LT = 0b1011, // N distinct from V. Less Than.
+    GT = 0b1100, // Z clear and N equals V. Greater Than.
+    LE = 0b1101, // Z set or N distinct from V.  Less than or Equal to.
+    AL = 0b1110, // ALways execute this instruction, i.e. no condition.
+    NV = 0b1111, // Reserved.
 }
 
 
@@ -156,46 +125,6 @@ impl ArmOpcode {
 }
 
 
-// TODO
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ArmBarrelShifterOp {
-    LSL(u8), // Logical Shift Left, CF << dst << 0
-    LSR(u8), // Logical Shift Right, 0 >> dst >> CF
-    ASR(u8), // Arithmetic Shift Right, dst#31 >> dst >> CF
-    ROR(u8), // ROtate Right, into CF
-}
-
-impl ArmBarrelShifterOp {
-    /// Decodes a shift operation from a 2-bit opcode.
-    ///
-    /// # Params
-    /// - `b`: 2-bit opcode. Upper bits will be ignored.
-    /// - `sh`: The shift to apply.
-    ///
-    /// # Returns
-    /// A barrel shifter operation.
-    pub fn from_bits(b: u8, sh: u8) -> ArmBarrelShifterOp {
-        match b & 0b11 {
-            0 => ArmBarrelShifterOp::LSL(sh),
-            1 => ArmBarrelShifterOp::LSR(sh),
-            2 => ArmBarrelShifterOp::ASR(sh),
-            3 => ArmBarrelShifterOp::ROR(sh),
-            _ => unreachable!(),
-        }
-    }
-    
-    /// Performs this shift operation on the given value.
-    pub fn execute_no_carry(self, x: i32) -> i32 {
-        match self {
-            ArmBarrelShifterOp::LSL(sh) => x.wrapping_shl(sh as u32),
-            ArmBarrelShifterOp::LSR(sh) => (x as u32).wrapping_shr(sh as u32) as i32,
-            ArmBarrelShifterOp::ASR(sh) => x.wrapping_shr(sh as u32),
-            ArmBarrelShifterOp::ROR(sh) => x.rotate_right((sh as u32) & 0x1F),
-        }
-    }
-}
-
-
 /*
     Instruction Flags:
         .... ....  .... ....  .... ....  .... ....
@@ -276,301 +205,362 @@ impl ArmBarrelShifterOp {
              _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
              RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
 */
+
 // TODO
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_snake_case)]
 pub struct ArmInstruction {
-    immediate: i32,
-    cond: ArmCondition,
-    opcode: ArmOpcode,
-    shift_op: ArmBarrelShifterOp,
-    Rd: u8,
-    Rn: u8,
-    Rs: u8,
-    Rm: u8,
-    is_data_processing: bool,
-    has_immediate: bool,
-    shift_from_reg: bool,
-    signed: bool,
-    set_flags: bool,
-    pre_indexed: bool,
-    auto_increment: bool,
-    force_usermode: bool,
-    sub_offset_reg: bool,
-    spsr: bool,
+    raw: i32,
 }
 
 impl ArmInstruction {
-    /// Creates an invalid instruction.
-    pub fn new() -> ArmInstruction {
-        ArmInstruction {
-            immediate:          0,
-            cond:               ArmCondition::AL,
-            opcode:             ArmOpcode::Invalid,
-            shift_op:           ArmBarrelShifterOp::LSL(0),
-            Rd:                 0,
-            Rn:                 0,
-            Rs:                 0,
-            Rm:                 0,
-            is_data_processing: false,
-            has_immediate:      false,
-            shift_from_reg:     false,
-            signed:             false,
-            set_flags:          false,
-            pre_indexed:        false,
-            auto_increment:     false,
-            force_usermode:     false,
-            sub_offset_reg:     false,
-            spsr:               false,
+    /// Get the condition field of the ARM instruction.
+    pub fn condition(self) -> ArmCondition {
+        let c = ((self.raw >> 28) & 0b1111) as u8;
+        unsafe { mem::transmute(c) }
+    }
+    
+    /// Get the index of register `Rn`.
+    #[allow(non_snake_case)]
+    pub fn Rn(self) -> usize {
+        ((self.raw >> 16) & 0b1111) as usize
+    }
+    
+    /// Get the index of register `Rd`.
+    #[allow(non_snake_case)]
+    pub fn Rd(self) -> usize {
+        ((self.raw >> 12) & 0b1111) as usize
+    }
+    
+    /// Get the index of register `Rs`.
+    #[allow(non_snake_case)]
+    pub fn Rs(self) -> usize {
+        ((self.raw >> 8) & 0b1111) as usize
+    }
+    
+    /// Get the index of register `Rm`.
+    #[allow(non_snake_case)]
+    pub fn Rm(self) -> usize {
+        ((self.raw >> 0) & 0b1111) as usize
+    }
+    
+    /// Calculates a shifted operand without carry flag.
+    ///
+    /// In case the operand is a rotated immediate, this
+    /// immediate value is returned. Otherwise, the given
+    /// registers are used to calculate the operand.
+    ///
+    /// # Params
+    /// - `regs`: The CPU's GPRs.
+    /// - `carry`: The current status of the carry flag.
+    ///
+    /// # Returns
+    /// A 32-bit operand.
+    pub fn shifted_operand(self, regs: &[i32], carry: bool) -> i32 {
+        if self.is_shift_field_register() {
+            self.calculate_shifted_register(regs, carry)
+        }
+        else { self.rotated_immediate() }
+    }
+    
+    /// Calculates a shifted operand with carry flag.
+    ///
+    /// In case the operand is a rotated immediate, this
+    /// immediate value is returned. Otherwise, the given
+    /// registers are used to calculate the operand.
+    ///
+    /// # Params
+    /// - `regs`: The CPU's GPRs.
+    /// - `carry`: The current status of the carry flag.
+    ///
+    /// # Returns
+    /// - `.0`: A 32-bit operand.
+    /// - `.1`: The new status of the carry flag.
+    pub fn shifted_operand_with_carry(self, regs: &[i32], carry: bool) -> (i32, bool) {
+        if self.is_shift_field_register() {
+            self.calculate_shifted_register_with_carry(regs, carry)
+        }
+        else { (self.rotated_immediate(), false) }
+    }
+    
+    /// Get the 24-bit sign-extended branch offset.
+    pub fn branch_offset(self) -> i32 {
+        ((self.raw << 8) as i32) >> 8
+    }
+    
+    /// Get the 24-bit comment field of an `SWI` instruction.
+    pub fn comment(self) -> i32 {
+        (self.raw & 0x00FFFFFF) as i32
+    }
+    
+    /// Determines whether a shift field is to be decoded as
+    /// rotated immediate value or as a shifted register value.
+    ///
+    /// # Returns
+    /// - `true`: Shift field is a register shift.
+    /// - `false`: Shift field is a rotated immediate.
+    pub fn is_shift_field_register(self) -> bool {
+        (self.raw & (1 << 25)) != 0
+    }
+    
+    /// Decodes a rotated immediate value.
+    ///
+    /// # Returns
+    /// An immediate 32-bit value consisting of a single
+    /// rotated byte.
+    pub fn rotated_immediate(self) -> i32 {
+        let bits = (2 * ((self.raw >> 8) & 0b1111)) as u32;
+        (self.raw & 0xFF).rotate_right(bits) as i32
+    }
+    
+    /// Determines whether an offset field is to be decoded
+    /// as shifted registers or as an immediate value.
+    ///
+    /// # Returns
+    /// - `true`: The offset is an immediate non-sign-extended value.
+    /// - `false`: The offset is a shifted register value.
+    #[inline(always)]
+    pub fn is_offset_field_immediate(self) -> bool {
+        self.is_shift_field_register()
+    }
+    
+    /// Checks whether this is a `B` or `BL` instruction.
+    ///
+    /// # Returns:
+    /// - `true`: `BL`
+    /// - `false`: `B`
+    pub fn is_branch_with_link(self) -> bool {
+        (self.raw & (1 << 24)) != 0
+    }
+    
+    /// Checks whether an offset register should be
+    /// pre-indexed or post-indexed.
+    ///
+    /// # Returns:
+    /// - `true`: pre-indexed
+    /// - `false`: post-indexed
+    pub fn is_pre_indexed(self) -> bool {
+        (self.raw & (1 << 24)) != 0
+    }
+    
+    /// Checks whether a given offset should be added
+    /// or subtracted from a base address.
+    ///
+    /// # Returns
+    /// - `true`: Add the given offset to the base address.
+    /// - `false`: Subtract the given offset from the base address.
+    pub fn is_offset_added(self) -> bool {
+        (self.raw & (1 << 23)) != 0
+    }
+    
+    /// Checks whether the given instruction accesses CPSR
+    /// or the current SPSR.
+    ///
+    /// # Returns
+    /// - `true`: Accessing the current SPSR.
+    /// - `false`: Accessing CPSR.
+    pub fn is_accessing_spsr(self) -> bool {
+        (self.raw & (1 << 22)) != 0
+    }
+    
+    /// Checks whether the given long instruction should
+    /// act as a signed or unsigned operation.
+    ///
+    /// # Returns
+    /// - `true`: The operation is signed.
+    /// - `false`: The operation is unsigned.
+    pub fn is_signed(self) -> bool {
+        (self.raw & (1 << 22)) != 0
+    }
+    
+    /// Checks whether a data transfer instruction should
+    /// transfer bytes or words.
+    ///
+    /// # Returns
+    /// - `true`: Transfer bytes.
+    /// - `false`: Transfering words.
+    pub fn is_transfering_bytes(self) -> bool {
+        (self.raw & (1 << 22)) != 0
+    }
+    
+    /// Checks whether register block transfer should be
+    /// done in user mode.
+    ///
+    /// # Returns
+    /// - `true`: Enforce user mode for privileged code.
+    /// - `false`: Execute in current mode.
+    pub fn is_enforcing_user_mode(self) -> bool {
+        (self.raw & (1 << 22)) != 0
+    }
+    
+    /// Checks whether a single register or a block of
+    /// registers should be transfered to or from a
+    /// co-processor.
+    ///
+    /// # Returns
+    /// - `true`: Transfer a block of registers.
+    /// - `false`: Transfer a single register.
+    pub fn is_register_block_transfer(self) -> bool {
+        (self.raw & (1 << 22)) != 0
+    }
+    
+    /// Checks whether a multiply instruction should
+    /// accumulate or not.
+    ///
+    /// # Returns
+    /// - `true`: Accumulate.
+    /// - `false`: Don't accumulate.
+    pub fn is_accumulating(self) -> bool {
+        (self.raw & (1 << 21)) != 0
+    }
+    
+    /// Checks whether the current instruction writes
+    /// a calculated address back to the base register.
+    pub fn is_auto_incrementing(self) -> bool {
+        (self.raw & (1 << 21)) != 0
+    }
+    
+    /// Checks whether the given instruction updates the
+    /// ZNCV status flags of CPSR.
+    ///
+    /// # Returns
+    /// - `true`: Updates CPSR.
+    /// - `false`: Does not modify CPSR.
+    pub fn is_setting_flags(self) -> bool {
+        (self.raw & (1 << 20)) != 0
+    }
+    
+    /// Checks whether the given instruction is a
+    /// load or store instruction.
+    ///
+    /// # Returns
+    /// - `true`: Load instruction.
+    /// - `false`: Store instruction.
+    pub fn is_load(self) -> bool {
+        (self.raw & (1 << 20)) != 0
+    }
+    
+    /// Calculates a shifted register operand without
+    /// calculating the carry flag.
+    ///
+    /// # Params
+    /// - `regs`: A reference to the CPU's general purpose registers.
+    ///
+    /// # Returns
+    /// A ready-to-use operand.
+    pub fn calculate_shifted_register(self, regs: &[i32], carry: bool) -> i32 {
+        // 0000 0000 RegM // ret = RegM
+        // _imm _op0 RegM // ret = RegM SHIFT(op) _imm_
+        // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
+        // 0000 0110 RegM // ret = RegM RRX 1
+        let a = regs[self.Rm()];
+        if (self.raw & 0x0FF0) == 0 { return a; }
+        
+        // Decode RRX?
+        if (self.raw & 0x0FF0) == 0x60 {
+            let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
+            return bit31 | (((a as u32) >> 1) as i32);
+        }
+        
+        let b: u32 = if (self.raw & (1 << 4)) == 0 {
+            ((self.raw >> 7) & 0b1_1111) as u32
+        } else {
+            match self.decode_Rs_shift(a, regs) {
+                Ok(x) => x,
+                Err(y) => { return y; },
+            }
+        };
+        
+        match (self.raw >> 5) & 0b11 {
+            0 => a.wrapping_shl(b),
+            1 => (a as u32).wrapping_shr(b) as i32,
+            2 => a.wrapping_shr(b),
+            3 => a.rotate_right(b % 32),
+            _ => unreachable!(),
         }
     }
     
-    /// Takes a raw 32-bit instruction and decodes
-    /// it into something easier to interpret by
-    /// software.
+    /// Calculates a shifted register operand and
+    /// calculates the resulting carry flag.
     ///
     /// # Params
-    /// - `raw`: The raw 32-bit instruction.
+    /// - `regs`: A reference to the CPU's general purpose registers.
+    /// - `carry`: The current state of the carry flag.
     ///
     /// # Returns
-    /// A decoded instruction.
-    pub fn decode(raw: u32) -> ArmInstruction {
-        let mut tmp = ArmInstruction::new();
-        tmp.cond = unsafe { mem::transmute( ((raw >> 28) & 0b1111) as u8 ) };
+    /// - `.0`: A ready-to-use operand.
+    /// - `.1`: `true` if carry, otherwise `false`.
+    pub fn calculate_shifted_register_with_carry(self, regs: &[i32], carry: bool) -> (i32, bool) {
+        // 0000 0000 RegM // ret = RegM
+        // _imm _op0 RegM // ret = RegM SHIFT(op) _imm_
+        // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
+        // 0000 0110 RegM // ret = RegM RRX 1
+        let a = regs[self.Rm()];
+        if (self.raw & 0x0FF0) == 0 { return (a, false); }
         
-        // Branch?
-        if (raw & 0x0E000000_u32) == 0x0A000000_u32 {
-            tmp.immediate = ((raw << 8) as i32) >> 6; // LSL by 2 bits and sign extension.
-            tmp.has_immediate = true;
-            tmp.opcode = if (raw & 0x01000000_u32) == 0 { ArmOpcode::B } else { ArmOpcode::BL };
-        }
-        // Branch exchange?
-        else if (raw & 0x0FFFFFF0_u32) == 0x012FFF10_u32 {
-            tmp.Rn     = (raw & 0x0F) as u8;
-            tmp.opcode = ArmOpcode::BX;
-        }
-        // Data processing?
-        else if (raw & 0x0C000000_u32) == 0 {
-            tmp.decode_data_processing(raw);
-        }
-        // MRS instruction?
-        else if (raw & 0x0FBF0FFF_u32) == 0x010F0000_u32 {
-            tmp.spsr   = (raw & (1 << 22)) != 0;
-            tmp.Rd     = ((raw >> 12) & 0b1111) as u8;
-            tmp.opcode = ArmOpcode::MRS;
-        }
-        // MSR instruction?
-        else if (raw & 0x0FBEFFF0_u32) == 0x0128F000_u32 {
-            tmp.spsr   = (raw & (1 << 22)) != 0;
-            tmp.Rm     = (raw & 0b1111) as u8;
-            tmp.opcode = ArmOpcode::MSR;
-        }
-        else if (raw & 0x0FBFF000_u32) == 0x0328F000_u32 {
-            let bits          = ((raw >> 8) & 0b1111) * 2;
-            tmp.has_immediate = true;
-            tmp.immediate     = (raw & 0xFF).rotate_right(bits) as i32;
-            tmp.spsr          = (raw & (1 << 22)) != 0;
-            tmp.opcode        = ArmOpcode::MSR;
-        }
-        // Multiply or Multiply Accumulate? Long?
-        else if (raw & 0x0F0000F0_u32) == 0x00000090_u32 {
-            // Possible bug, as MLA/MUL instructions
-            // with a set sign bit will be accepted here.
-            tmp.decode_multiplication(raw);
-        }
-        // Single data transfer?
-        else if (raw & 0x0C000000_u32) == 0x04000000_u32 {
-            tmp.decode_single_data_transfer(raw);
-        }
-        // Single Swap?
-        else if (raw & 0x0FB00FF0_u32) == 0x01000090_u32 {
-            tmp.Rn = ((raw >> 16) & 0b1111) as u8;
-            tmp.Rd = ((raw >> 12) & 0b1111) as u8;
-            tmp.Rm = ((raw >>  0) & 0b1111) as u8;
-            tmp.opcode = if (raw & (1 << 22)) != 0 { ArmOpcode::SWPB } else { ArmOpcode::SWPW };
-        }
-        // Halfword or signed data transfer?
-        else if (raw & 0x0E000090_u32) == 0x00000090_u32 {
-            tmp.decode_halfword_and_signed_data_transfer(raw);
-        }
-        // Block data transfer?
-        else if (raw & 0x0E000000_u32) == 0x08000000_u32 {
-            tmp.decode_block_data_transfer(raw);
-        }
-        // Software Interrupt?
-        else if (raw & 0x0F000000_u32) == 0x0F000000_u32 {
-            // Decode comment as well, in case I want to use it for... stuff?
-            tmp.immediate     = (raw & 0x00FFFFFF_u32) as i32;
-            tmp.has_immediate = true;
-            tmp.opcode        = ArmOpcode::SWI;
-        }
-        // Co-Processor data operations?
-        else if (raw & 0x0F000010_u32) == 0x0E000000_u32 {
-            tmp.decode_cp_data_op(raw);
-        }
-        // TODO co-processor and undefined
-        // Undefined or unimplemented opcode.
-        else {
-            tmp.immediate = raw as i32;
-            tmp.opcode    = ArmOpcode::Invalid;
-            error!("Decoding invalid or unimplemented instruction: {:#8X}", raw);
+        // Decode RRX?
+        if (self.raw & 0x0FF0) == 0x60 {
+            let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
+            return (bit31 | (((a as u32) >> 1) as i32), 0 != (a & 0b1));
         }
         
-        // Done decoding.
-        tmp
+        // A shift by Rs==0 just returns a without `a` new carry flag.
+        let b: u32 = if (self.raw & (1 << 4)) == 0 {
+            ((self.raw >> 7) & 0b1_1111) as u32
+        } else {
+            match self.decode_Rs_shift_with_carry(a, regs, carry) {
+                Ok(x) => x,
+                Err(y) => { return y; },
+            }
+        };
+        
+        let carry_right = 0 != (a.wrapping_shr(b - 1) & 0b1);
+        
+        match (self.raw >> 5) & 0b11 {
+            0 => (a.wrapping_shl(b), 0 != (a.wrapping_shr(32 - b) & 0b1)),
+            1 => ((a as u32).wrapping_shr(b) as i32, carry_right),
+            2 => (a.wrapping_shr(b), carry_right),
+            3 => (a.rotate_right(b % 32), carry_right),
+            _ => unreachable!(),
+        }
     }
     
     
     #[allow(non_snake_case)]
-    fn decode_Rm_shifting(&mut self, raw: u32) {
-        self.Rm = (raw & 0b1111) as u8;
-        let sh: u8 = if (raw & 0x10) == 0 {
-            ((raw >> 7) & 0x1F) as u8
-        } else {
-            self.Rs = ((raw >> 8) & 0b1111) as u8;
-            self.shift_from_reg = true;
-            0_u8
-        };
-        self.shift_op = ArmBarrelShifterOp::from_bits((raw >> 5) as u8, sh);
-    }
-    
-    fn decode_data_processing(&mut self, raw: u32) {
-        self.is_data_processing = true;
+    fn decode_Rs_shift(self, a: i32, regs: &[i32]) -> Result<u32, i32> {
+        let r = (regs[self.Rs()] & 0xFF) as u32;
+        if r == 0 { return Err(a); }
         
-        // Decode the obvious parameters.
-        self.has_immediate = (raw & (1 << 25)) != 0;
-        self.set_flags     = (raw & (1 << 20)) != 0;
-        self.Rn = ((raw >> 16) & 0b1111) as u8;
-        self.Rd = ((raw >> 12) & 0b1111) as u8;
-        
-        // Decode shifting.
-        if self.has_immediate {
-            let bits = ((raw >> 8) & 0b1111) * 2;
-            self.immediate = (raw & 0xFF).rotate_right(bits) as i32;
-        } else {
-            self.decode_Rm_shifting(raw);
+        if r >= 32 {
+            Err(match (self.raw >> 5) & 0b11 {
+                0 => 0,
+                1 => 0,
+                2 => a >> 31,
+                3 => if r == 32 { a } else { a.rotate_right(r % 32) },
+                _ => unreachable!(),
+            })
         }
-        
-        // Decode the opcode.
-        self.opcode = ArmOpcode::data_processing_from_bits((raw >> 21) as u8);
+        else { Ok(r) }
     }
     
-    fn decode_multiplication(&mut self, raw: u32) {
-        // Operand registers are the same.
-        self.Rd = ((raw >> 16) & 0b1111) as u8;
-        self.Rn = ((raw >> 12) & 0b1111) as u8;
-        self.Rs = ((raw >>  8) & 0b1111) as u8;
-        self.Rm = ((raw >>  0) & 0b1111) as u8;
+    #[allow(non_snake_case)]
+    fn decode_Rs_shift_with_carry(self, a: i32, regs: &[i32], carry: bool) -> Result<u32, (i32, bool)> {
+        let r = (regs[self.Rs()] & 0xFF) as u32;
+        if r == 0 { return Err((a, carry)); }
         
-        // This trick exploits instruction similarities
-        // to reduce the amount of code. Usually, a MUL
-        // or MLA instruction must not have a set sign bit.
-        // However, this code here does accept a set one.
-        self.signed    = (raw & (1 << 22)) != 0;
-        self.set_flags = (raw & (1 << 20)) != 0;
-        let accum      = (raw & (1 << 21)) != 0;
-        self.opcode = if (raw & (1 << 23)) != 0 {
-            if accum { ArmOpcode::MLAL } else { ArmOpcode::MULL }
-        } else {
-            if self.signed { warn!("MLA/MUL sign bit should be zero.") };
-            if accum { ArmOpcode::MLA } else { ArmOpcode::MUL }
-        };
-    }
-    
-    fn decode_single_data_transfer(&mut self, raw: u32) {
-        // Decode flags.
-        self.has_immediate  = (raw & (1 << 25)) == 0;
-        self.pre_indexed    = (raw & (1 << 24)) != 0;
-        let up              = (raw & (1 << 23)) != 0;
-        let byte            = (raw & (1 << 22)) != 0;
-        self.auto_increment = (raw & (1 << 21)) != 0;
-        let load            = (raw & (1 << 20)) != 0;
-        
-        // Decode operands.
-        self.Rn = ((raw >> 16) & 0b1111) as u8;
-        self.Rd = ((raw >> 12) & 0b1111) as u8;
-        
-        // Decode offset.
-        if self.has_immediate {
-            let x = (raw & 0x0FFF) as i32;
-            self.immediate = if up { x } else { -x };
-        } else {
-            self.decode_Rm_shifting(raw);
+        if r >= 32 {
+            let bit31 = 0 != (a & (0x80000000_u32 as i32));
+            Err(match (self.raw >> 5) & 0b11 {
+                0 => if r == 32 { (0, 0 != (a & 0b1)) } else { (0, false) },
+                1 => if r == 32 { (0, bit31) } else { (0, false) },
+                2 => (a >> 31, bit31),
+                3 => if r == 32 { (a, bit31) } else {
+                    let r = r % 32;
+                    (a.rotate_right(r), 0 != (a.wrapping_shr(r - 1) & 0b1))
+                },
+                _ => unreachable!(),
+            })
         }
-        
-        // And decode opcode.
-        self.opcode = match (byte, load) {
-            (false, false) => ArmOpcode::STRW,
-            (false, true ) => ArmOpcode::LDRW,
-            (true,  false) => ArmOpcode::STRB, // Unsigned load.
-            (true,  true ) => ArmOpcode::LDRB, // Unsigned load.
-        };
-    }
-    
-    fn decode_halfword_and_signed_data_transfer(&mut self, raw: u32) {
-        // Decode flags.
-        self.pre_indexed    = (raw & (1 << 24)) != 0;
-        let up              = (raw & (1 << 23)) != 0;
-        let offset          = (raw & (1 << 22)) != 0;
-        self.auto_increment = (raw & (1 << 21)) != 0;
-        let load            = (raw & (1 << 20)) != 0;
-        self.signed         = (raw & (1 <<  6)) != 0;
-        
-        // Decode operands.
-        self.Rn = ((raw >> 16) & 0b1111) as u8;
-        self.Rd = ((raw >> 12) & 0b1111) as u8;
-        let ohi = ((raw >>  4) & 0x00F0) as u8;
-        let olo = ((raw >>  0) & 0b1111) as u8;
-        
-        // Load offset (register).
-        if (!offset) & (ohi != 0) { warn!("Non-zero offset in non-offset halfword data transfer."); }
-        if offset {
-            self.immediate = (ohi | olo) as i32;
-            if !up { self.immediate = -self.immediate; }
-            self.has_immediate = true;
-        } else {
-            self.Rm = olo;
-            self.sub_offset_reg = !up;
-        }
-        
-        // Decode opcode.
-        self.opcode = match (raw >> 5) & 0b11 {
-            0     => unimplemented!(), // TODO SWP instruction? Wtf?
-            2     => if load { ArmOpcode::LDRB } else { ArmOpcode::STRB },
-            1 | 3 => if load { ArmOpcode::LDRH } else { ArmOpcode::STRH },
-            _ => unreachable!(),
-        };
-    }
-    
-    fn decode_block_data_transfer(&mut self, raw: u32) {
-        // Decode flags.
-        self.pre_indexed    = (raw & (1 << 24)) != 0;
-        self.sub_offset_reg = (raw & (1 << 23)) == 0; // Decrement addressing.
-        self.force_usermode = (raw & (1 << 22)) != 0;
-        self.auto_increment = (raw & (1 << 21)) != 0;
-        let load            = (raw & (1 << 20)) != 0;
-        
-        // Decode operand and register list.
-        self.Rn        = ((raw >> 16) & 0b1111) as u8;
-        self.immediate = ((raw >>  0) & 0xFFFF) as i32;
-        self.has_immediate = true;
-        
-        // Decode opcode.
-        self.opcode = if load { ArmOpcode::LDM } else { ArmOpcode::STM };
-    }
-    
-    fn decode_cp_data_op(&mut self, raw: u32) {
-        // Decode registers.
-        self.Rn = ((raw >> 16) & 0b1111) as u8;
-        self.Rd = ((raw >> 12) & 0b1111) as u8;
-        self.Rm = ((raw >>  0) & 0b1111) as u8;
-        
-        // Decode information and CP#.
-        self.has_immediate = true;
-        self.immediate     = ((raw >> 8) & 0b1111) as u8; // Co-Processor number.
-        self.Rs            = ((raw >> 5) & 0b0111) as u8; // Co-Processor information.
-        
-        // Decode CP opcode.
-        self.opcode = ArmOpcode::CDP(((raw >> 20) & 0b1111) as u8);
+        else { Ok(r) }
     }
 }
