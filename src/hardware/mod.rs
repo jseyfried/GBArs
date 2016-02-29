@@ -4,14 +4,15 @@
 use std::path::Path;
 use std::io;
 
-use self::cpu::{Arm7Tdmi, IoRegisters};
+pub use self::cpu::{Arm7Tdmi, ArmInstruction, IoRegisters};
+pub use self::error::*;
 pub use self::gamepak::*;
 
 
-mod cpu;
-mod memory;
+pub mod cpu;
+pub mod memory;
 pub mod gamepak;
-
+pub mod error;
 
 pub struct Gba {
     //
@@ -36,7 +37,10 @@ impl Gba {
     
     //
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        self.game_pak.load_rom_from_file(fp)
+        use self::memory::Rom32;
+        let x = self.game_pak.load_rom_from_file(fp);
+        debug!("First ROM instruction:\n{}", ArmInstruction::decode(self.game_pak.rom().read_word(0xC0+0x48) as i32).unwrap());
+        x
     }
     
     /// Get a handle for the ROM's header.

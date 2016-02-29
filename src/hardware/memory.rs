@@ -220,7 +220,7 @@ pub trait Rom8 : RawBytes {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn read_u8(&self, offs: u32) -> u8 {
+    fn read_byte(&self, offs: u32) -> u8 {
         self.bytes(offs)[0]
     }
 }
@@ -237,7 +237,7 @@ pub trait Ram8 : Rom8 {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn write_u8(&mut self, offs: u32, data: u8) {
+    fn write_byte(&mut self, offs: u32, data: u8) {
         self.bytes_mut(offs)[0] = data;
     }
 }
@@ -257,7 +257,7 @@ pub trait Rom16 : RawBytes {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn read_u16(&self, offs: u32) -> u16 {
+    fn read_halfword(&self, offs: u32) -> u16 {
         LittleEndian::read_u16( self.bytes(offs & !0b01) )
     }
 }
@@ -274,7 +274,7 @@ pub trait Ram16 : Rom16 {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn write_u16(&mut self, offs: u32, data: u16) {
+    fn write_halfword(&mut self, offs: u32, data: u16) {
         LittleEndian::write_u16( self.bytes_mut(offs & !0b01), data );
     }
 }
@@ -294,7 +294,7 @@ pub trait Rom32 : RawBytes {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn read_u32(&self, offs: u32) -> u32 {
+    fn read_word(&self, offs: u32) -> u32 {
         LittleEndian::read_u32( self.bytes(offs & !0b11) )
     }
 }
@@ -311,7 +311,7 @@ pub trait Ram32 : Rom32 {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn write_u32(&mut self, offs: u32, data: u32) {
+    fn write_word(&mut self, offs: u32, data: u32) {
         LittleEndian::write_u32( self.bytes_mut(offs & !0b11), data );
     }
 }

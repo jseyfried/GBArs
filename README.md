@@ -19,6 +19,18 @@ A GBA emulator written in Rust.
 	> Notepad++ syntax highlighting for Rust.
 	
 	There are some missing highlights like the keyword `crate`, but these are easily added by hand.
+	
+- **[Online Disassembler](https://onlinedisassembler.com/odaweb/)**
+	
+	> Disassembly in the cloud.
+	
+	As the name states: A website disassembling your binaries. Just copy and paste sections of your ROM files and have fun. Note that the GBA works in Little Endian mode.
+
+- **[ARM7TDMI Instruction Set Reference](http://morrow.ece.wisc.edu/ECE353/arm7tdmi_instruction_set_reference.pdf)**
+	
+	> Department of Electrical and Computer Engineering University of Wisconsin-Madison
+	
+	Thanks to those guys, here is an instruction set reference manual for the ARM7TDMI, which is the very CPU used in the GBA.
 
 
 # References
