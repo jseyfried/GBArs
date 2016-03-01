@@ -2,6 +2,22 @@
 
 A GBA emulator written in Rust.
 
+Thanks to a guy named Ferris and his project [Rustendo 64](https://github.com/yupferris/rustendo64), many people got motivated to write their own emulators in Rust. Even I wasn't spared, so here it is, my GBA emulator.
+
+And why GBA?
+
+- It is ARM-based and ARM is sexy.
+- I want to play Metroid Zero Mission and Fusion with it.
+- It can handle GBC games as well.
+
+# Build and Run
+
+Building the emulator currently requires a nightly Rust installation, version 1.8 or higher. If you have it, you can `cd` into the source directory and do one of the following:
+
+- To run all tests, execute `cargo test`.
+- To generate an HTML documentation for the source code, execute `cargo doc`.
+- To build the emulator, execute `cargo build --release`.
+- To run the emulator, execute `cargo run -- ARGS...` with any command line arguments `ARGS...`. You may want to try `cargo run -- --help` to get a list of all supported command line arguments.
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**
