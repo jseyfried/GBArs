@@ -86,4 +86,6 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 # License
 
-Licensed under the [Mozilla Public License 2.0](./LICENSE-MPL.md).
+Licensed under the [Apache License 2.0](./LICENSE-APACHE.md).
+
+[https://www.apache.org/licenses/LICENSE-2.0.html](https://www.apache.org/licenses/LICENSE-2.0.html)
