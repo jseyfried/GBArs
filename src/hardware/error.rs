@@ -24,8 +24,8 @@ impl error::Error for GbaError {
 impl fmt::Display for GbaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            GbaError::InvalidArmInstruction(x)   => write!(f, "Invalid ARM Instruction {:#08X}", x),
-            GbaError::InvalidThumbInstruction(x) => write!(f, "Invalid THUMB Instruction {:#04X}", x),
+            GbaError::InvalidArmInstruction(x)   => write!(f, "Invalid ARM Instruction {:#010X}", x),
+            GbaError::InvalidThumbInstruction(x) => write!(f, "Invalid THUMB Instruction {:#06X}", x),
             GbaError::ReservedArmConditionNV     => write!(f, "Invalid ARM condition NV"),
         }
     }

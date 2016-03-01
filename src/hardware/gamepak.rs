@@ -187,7 +187,7 @@ impl GamePakRom {
         
         // Loads a binary ROM from a given file and
         // fills the remaining space with zero bytes.
-        info!("Loading ROM file `{}`.", fp.display());
+        trace!("Loading ROM file `{}`.", fp.display());
         let mut file = try!(File::open(fp));
         let rbytes = try!(file.read(&mut *self.raw_bytes));
         for i in rbytes..MAX_GBA_ROM_SIZE { self.raw_bytes[i] = 0 };

@@ -17,7 +17,7 @@ pub struct ConsoleFileLogger {
 
 impl Log for ConsoleFileLogger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
-        let min_level = if self.verbose { LogLevel::Info } else { LogLevel::Trace };
+        let min_level = if self.verbose { LogLevel::Trace } else { LogLevel::Info };
         metadata.level() <= min_level
     }
 
