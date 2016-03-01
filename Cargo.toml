@@ -2,10 +2,22 @@
 name         = "rsgba"
 version      = "0.1.0"
 authors      = ["Evrey <evrey@hackish.codes>"]
-description  = "GBArs is a GBA emulator written in Rust."
 readme       = "README.md"
-keywords     = ["emulator", "gba"]
+keywords     = ["emulator", "gba", "arm", "thumb"]
 license      = "Apache-2.0"
+description  = """
+GBArs is a GameBoy Advance emulator written in Rust.
+
+Thanks to a guy named Ferris and his project Rustendo 64, many people got
+motivated to write their own emulators in Rust. Even I wasn't spared, so
+here it is, my GBA emulator.
+
+And why GBA?
+
+- It is ARM-based and ARM is sexy.
+- I want to play Metroid Zero Mission and Fusion with it.
+- It can handle GBC games as well.
+"""
 
 [dependencies]
 clippy    = { version = "^0.0", optional = true }
