@@ -10,6 +10,13 @@ And why GBA?
 - I want to play Metroid Zero Mission and Fusion with it.
 - It can handle GBC games as well.
 
+# Features
+
+- Integreated disassembler.
+	- Disassemble individual instructions via command line:
+	- Disassemble sections of the loaded ROM.
+- TODO
+
 # Build and Run
 
 Building the emulator currently requires a nightly Rust installation, version 1.8 or higher. If you have it, you can `cd` into the source directory and do one of the following:
