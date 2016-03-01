@@ -13,8 +13,8 @@ And why GBA?
 # Features
 
 - Integreated disassembler.
-	- Disassemble individual instructions via command line:
-	- Disassemble sections of the loaded ROM.
+	- Disassemble individual instructions via command line.
+	- Disassemble sections of the loaded ROM via command line.
 - TODO
 
 # Build and Run
