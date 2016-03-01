@@ -1,6 +1,7 @@
 // License below.
-
+//! Implements everything neccessary to emulate the GBA hardware.
 #![allow(dead_code)]
+#![warn(missing_docs)]
 
 use std::path::Path;
 use std::io;

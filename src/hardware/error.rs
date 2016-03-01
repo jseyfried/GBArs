@@ -1,14 +1,23 @@
 // License below.
+//! Provides an error type for GBA hardware emulation errors.
+#![warn(missing_docs)]
 
 use std::error;
 use std::fmt;
 
 
-// TODO
+/// An error caused during GBA hardware emulation.
 #[derive(Debug)]
 pub enum GbaError {
+    /// An invalid ARM instruction has been decoded.
+    ///
+    /// This is not to be confused with an undefined instruction.
     InvalidArmInstruction(u32),
+    
+    /// An invalid THUMB instruction has been decoded.
     InvalidThumbInstruction(u16),
+    
+    /// An instruction using the reserved `NV` condition has been executed.
     ReservedArmConditionNV,
 }
 

@@ -1,18 +1,20 @@
 // License below.
+//! GBArs' logging implementation.
+#![warn(missing_docs)]
 
 use std::io::Write;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::sync::Mutex;
 use std::cell::RefCell;
 use std::thread;
 use log::{set_logger, Log, LogMetadata, LogRecord, LogLevel, LogLevelFilter, SetLoggerError};
 
-
+/// A logger that forwards log messages to `stdout` and a log file.
 pub struct ConsoleFileLogger {
-    pub file: Option<Mutex<RefCell<File>>>,
-    pub verbose: bool,
-    pub colour: bool,
+    file: Option<Mutex<RefCell<File>>>,
+    verbose: bool,
+    colour: bool,
 }
 
 impl Log for ConsoleFileLogger {
@@ -31,13 +33,14 @@ impl Log for ConsoleFileLogger {
             let fmt = format!("{}", record.args()).replace("\n","\n\t\t   ");
             
             // Build a common log message for both targets.
-            let msg = format!("[TID={}]\t{}\t{}\n\t\t-- {}\n", tid, record.level(), loc, fmt);
+            let mut msg = format!("[TID={}]\t{}\t{}\n\t\t-- {}\n", tid, record.level(), loc, fmt);
             
             // Log to file.
             if let Some(f) = self.file.as_ref() {
                 let tmp = f.lock().unwrap();
                 writeln!(*(tmp.borrow_mut()), "{}", msg).unwrap();
             }
+            else { msg.push_str("\n\x1B[31m\x1B[1mNo log file!\x1B[0m"); }
             
             // Log to stdout.
             if !self.colour { println!("{}", msg); }
@@ -58,11 +61,24 @@ impl Log for ConsoleFileLogger {
 }
 
 
+/// Initialises the logging library to use a `ConsoleFileLogger`.
+///
+/// # Params
+/// - `file`: Path to the log file to write to.
+/// - `verbose`: If `false`, ignores debug and trace messages.
+/// - `colour`: If `true`, colourises the `stdout` output using escape codes.
+///
+/// # Returns
+/// - `Ok` if the logger has been created successfully.
+/// - `Err` otherwise.
 pub fn init_with(file: &Path, verbose: bool, colour: bool) -> Result<(), SetLoggerError> {
     set_logger(|max_log_level| {
         max_log_level.set(LogLevelFilter::Trace);
         box ConsoleFileLogger {
-            file: Some(Mutex::new(RefCell::new(File::create(file).unwrap()))),
+            file: match OpenOptions::new().write(true).truncate(true).open(file) {
+                Ok(f)  => Some(Mutex::new(RefCell::new(f))),
+                Err(_) => None,
+            },
             verbose: verbose,
             colour: colour,
         }

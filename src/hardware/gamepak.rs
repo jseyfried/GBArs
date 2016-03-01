@@ -1,4 +1,20 @@
 // License below.
+//! Implements the GamePak.
+//!
+//! A GamePak basically consists of two components:
+//! 
+//! - A ROM chip.
+//! - An SRAM chip.
+//! - Optionally additional features.
+//!
+//! The ROM chip obviously contains the game itself.
+//! This memory region is initialised by loading a
+//! ROM file.
+//!
+//! The SRAM chip is where you game's progress will
+//! be saved. The SRAM's contents will be dumped into
+//! a saved game file.
+#![warn(missing_docs)]
 
 use std::io;
 use std::str;
@@ -135,7 +151,7 @@ impl<'a> fmt::Display for GamePakRomHeader<'a> {
 }
 
 
-/// TODO
+/// Implements a GamePak' ROM chip.
 pub struct GamePakRom {
     // Raw memory block. Nothing special here.
     raw_bytes: Box<[u8; MAX_GBA_ROM_SIZE]>,
@@ -223,7 +239,7 @@ impl Rom16 for GamePakRom {}
 impl Rom32 for GamePakRom {}
 
 
-/// The GamePak's SRAM.
+/// Implements a GamePak's SRAM.
 pub struct GamePakSram(Box<[u8; GAME_PAK_SRAM_LEN as usize]>);
 
 impl GamePakSram {
@@ -252,7 +268,7 @@ impl Rom8 for GamePakSram {}
 impl Ram8 for GamePakSram {}
 
 
-/// A GamePak.
+/// Implements a GamePak.
 pub struct GamePak {
     rom: GamePakRom,
     sram: GamePakSram,

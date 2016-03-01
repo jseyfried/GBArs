@@ -1,4 +1,6 @@
 // License below.
+//! Utility types and constants for managing GBA memory.
+#![warn(missing_docs)]
 
 use byteorder::{ByteOrder, LittleEndian};
 

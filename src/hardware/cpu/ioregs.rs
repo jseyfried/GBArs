@@ -1,4 +1,5 @@
 // License below.
+#![warn(missing_docs)]
 
 use super::super::memory::IO_REGISTERS_LEN;
 use super::super::memory::{RawBytes, Rom8, Rom16, Rom32, Ram8, Ram16, Ram32};

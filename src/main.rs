@@ -1,4 +1,19 @@
 // License below.
+//! # GBArs
+//!
+//! A GameBoy Advance emulator written in Rust.
+//!
+//! Thanks to a guy named Ferris and his project [Rustendo 64](https://github.com/yupferris/rustendo64),
+//! many people got motivated to write their own emulators in Rust. Even I wasn't
+//! spared, so here it is, my GBA emulator.
+//!
+//! And why GBA?
+//!
+//! - It is ARM-based and ARM is sexy.
+//! - I want to play Metroid Zero Mission and Fusion with it.
+//! - It can handle GBC games as well.
+//!
+// TODO moah docz!
 
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
@@ -13,20 +28,46 @@ extern crate byteorder;
 use argparse::{ArgumentParser, Print, Parse, ParseOption, StoreTrue, StoreFalse, StoreOption};
 use std::path::PathBuf;
 
-mod logger;
-mod hardware;
+pub mod logger;
+pub mod hardware;
 
 
-struct CmdLineArgs {
-    rom_file_path: Option<PathBuf>,
-    log_file_path: PathBuf,
-    single_disasm_arm: Option<String>,
-    verbose: bool,
-    colour: bool,
+/// Set of values configurable by the command line.
+///
+/// Execute `GBArs -h` or `GBArs --help` to print
+/// a list of all supported command line arguments.
+pub struct CmdLineArgs {
+    /// Accepts `--rom FILE`.
+    ///
+    /// The ROM file will be loaded immediately after
+    /// initialising the emulator.
+    pub rom_file_path: Option<PathBuf>,
+    
+    /// Accepts `--log FILE`, defaults to `"./GBArs.log"`.
+    pub log_file_path: PathBuf,
+    
+    /// Accepts `--dasm-arm INST`.
+    ///
+    /// Disassembles a single ARM instruction and
+    /// logs the result.
+    pub single_disasm_arm: Option<String>,
+    
+    /// Accepts `-v` or `--verbose` as `true`.
+    ///
+    /// If `false`, log messages of log level *debug*
+    /// and *trace* will be ignored.
+    pub verbose: bool,
+    
+    /// Accepts `-c` or `--with-colour` as `true`, which is the default value.
+    ///
+    /// Also accepts `-k` or `--without-colour` as `false`.
+    ///
+    /// If `true`, log messages sent to the console will be
+    /// slightly colourised for improved readability.
+    pub colour: bool,
 }
 
 impl Default for CmdLineArgs {
-    //
     fn default() -> CmdLineArgs {
         CmdLineArgs {
             rom_file_path: None,

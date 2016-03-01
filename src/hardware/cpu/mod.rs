@@ -1,4 +1,16 @@
 // License below.
+//! Implements everything related to the GBA's CPUs.
+//!
+//! The GBA has two different CPUs installed:
+//!
+//! - **ARM7TDMI** capable of executing two instruction sets:
+//!     - ARMv4 instruction set.
+//!     - THUMB instruction set.
+//! - **Zilog Z80** for GameBoy Color backwards compatiblity.
+//!
+//! Emulation utilities for these CPUs and their instruction
+//! sets are implemented here.
+#![warn(missing_docs)]
 
 pub use self::arm7tdmi::*;
 pub use self::arminstruction::*;

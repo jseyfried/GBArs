@@ -1,4 +1,7 @@
 // License below.
+//! Implements utilities to decode, disassemble, and handle
+//! 32-bit ARM state instructions.
+#![warn(missing_docs)]
 
 use std::mem;
 use std::fmt;

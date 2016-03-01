@@ -1,4 +1,5 @@
 // License below.
+#![warn(missing_docs)]
 
 use std::mem;
 
