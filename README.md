@@ -1,4 +1,4 @@
-# rsGBA
+# GBArs
 
 A GBA emulator written in Rust.
 
@@ -12,6 +12,7 @@ And why GBA?
 
 # Features
 
+- A stupid name, pronounced: "G-B-Ars"
 - Integreated disassembler.
 	- Disassemble individual instructions via command line.
 	- Disassemble sections of the loaded ROM via command line.

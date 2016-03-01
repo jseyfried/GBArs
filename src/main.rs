@@ -29,7 +29,7 @@ impl Default for CmdLineArgs {
     fn default() -> CmdLineArgs {
         CmdLineArgs {
             rom_file_path: None,
-            log_file_path: PathBuf::from("./rsGBA.log"),
+            log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
             verbose: false,
             colour: true,
@@ -55,7 +55,7 @@ fn parse_command_line(args: &mut CmdLineArgs) {
     let mut parser = ArgumentParser::new();
     parser.set_description("A GBA emulator written in Rust.");
     parser.add_option(&["-V", "--version"],
-                      Print(format!("rsGBA v{}", env!("CARGO_PKG_VERSION"))),
+                      Print(format!("GBArs v{}", env!("CARGO_PKG_VERSION"))),
                       "Show current version.");
     parser.refer(&mut args.rom_file_path)
           .add_option(&["--rom"], ParseOption, "Path to a ROM file to load.")
