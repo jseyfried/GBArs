@@ -37,7 +37,20 @@ impl Gba {
         }
     }
     
-    //
+    /// Loads a ROM from a file.
+    ///
+    /// Only ROMs up to 32MiB in size are valid.
+    /// Everything beyond that size will be silently
+    /// dropped.
+    ///
+    /// Unused memory is zero-filled.
+    ///
+    /// # Params
+    /// - `fp`: Path to the ROM file to load.
+    ///
+    /// # Returns
+    /// - `Ok` if loaded successfully.
+    /// - `Err` if an error occurred. The previous data might be damaged.
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
         self.game_pak.load_rom_from_file(fp)
     }

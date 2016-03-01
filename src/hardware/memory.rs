@@ -109,17 +109,40 @@ pub const GAME_PAK_SRAM_LEN: u32 = (GAME_PAK_SRAM_LAST+1) - GAME_PAK_SRAM_FIRST;
 ///
 /// The local addresses always start from 0.
 pub enum PhysicalAddress {
+    /// Address relative to the BIOS ROM area.
     BiosROM(u32),
+    
+    /// Address relative to the slower on-board WRAM.
     OnBoardWRAM(u32),
+    
+    /// Address relative to the quicker on-chip WRAM.
     OnChipWRAM(u32),
+    
+    /// Address relative to the IO registers area.
     RegistersIO(u32),
+    
+    /// Address relative to the palette RAM area.
     PaletteRAM(u32),
+    
+    /// Address relative to the VRAM area.
     VRAM(u32),
+    
+    /// Address relative to the object attributes area.
     AttributesOBJ(u32),
+    
+    /// Address relative to the GamePak ROM in wait state 0 area.
     GamePak0ROM(u32),
+    
+    /// Address relative to the GamePak ROM in wait state 1 area.
     GamePak1ROM(u32),
+    
+    /// Address relative to the GamePak ROM in wait state 2 area.
     GamePak2ROM(u32),
+    
+    /// Address relative to the GamePak SRAM area.
     GamePakSRAM(u32),
+    
+    /// An invalid physical address.
     Invalid(u32),
 }
 

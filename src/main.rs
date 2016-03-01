@@ -3,7 +3,7 @@
 //!
 //! A GameBoy Advance emulator written in Rust.
 //!
-//! Thanks to a guy named Ferris and his project [Rustendo 64](https://github.com/yupferris/rustendo64),
+//! Thanks to a guy named Ferris and his project [Rustendo 64][1],
 //! many people got motivated to write their own emulators in Rust. Even I wasn't
 //! spared, so here it is, my GBA emulator.
 //!
@@ -13,8 +13,7 @@
 //! - I want to play Metroid Zero Mission and Fusion with it.
 //! - It can handle GBC games as well.
 //!
-// TODO moah docz!
-
+//! [1]: https://github.com/yupferris/rustendo64
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 #![feature(box_syntax, associated_consts)]

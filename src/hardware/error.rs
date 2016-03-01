@@ -19,6 +19,9 @@ pub enum GbaError {
     
     /// An instruction using the reserved `NV` condition has been executed.
     ReservedArmConditionNV,
+    
+    /// Tried accessing an invalid physical address.
+    InvalidPhysicalAddress(u32),
 }
 
 impl error::Error for GbaError {
@@ -26,7 +29,8 @@ impl error::Error for GbaError {
         match *self {
             GbaError::InvalidArmInstruction(_)   => "Invalid instruction in ARM state.",
             GbaError::InvalidThumbInstruction(_) => "Invalid instruction in THUMB state.",
-            GbaError::ReservedArmConditionNV     => "Invalid NV condition in ARM state."
+            GbaError::ReservedArmConditionNV     => "Invalid NV condition in ARM state.",
+            GbaError::InvalidPhysicalAddress(_)  => "Invalid physical address."
         }
     }
 }
@@ -37,6 +41,7 @@ impl fmt::Display for GbaError {
             GbaError::InvalidArmInstruction(x)   => write!(f, "Invalid ARM Instruction {:#010X}", x),
             GbaError::InvalidThumbInstruction(x) => write!(f, "Invalid THUMB Instruction {:#06X}", x),
             GbaError::ReservedArmConditionNV     => write!(f, "Invalid ARM condition NV"),
+            GbaError::InvalidPhysicalAddress(x)  => write!(f, "Invalid physical address {:#010X}", x),
         }
     }
 }

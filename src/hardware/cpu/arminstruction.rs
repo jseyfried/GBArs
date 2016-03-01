@@ -1,6 +1,96 @@
 // License below.
 //! Implements utilities to decode, disassemble, and handle
 //! 32-bit ARM state instructions.
+//!
+//! These tables show how ARM state instructions are encoded:
+//!
+//! ```text
+//! Instruction Flags:
+//!     .... ....  .... ....  .... ....  .... ....
+//!     COND                                  RegM | BX #map: RegN => RegM
+//!     COND    F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL
+//!     COND         AS RegN  RegD RegS       RegM | MUL/MLA #map: RegN <=> RegD
+//!     COND        UAS RegN  RegD RegS       RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
+//!     COND        P         RegD                 | MRS
+//!     COND        P                         RegM | MSR by RegM
+//!     COND   I    P              shft  shft shft | MSR by Immediate...
+//!            0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
+//!            0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
+//!            1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
+//!     COND   Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op4(xxxx)...
+//!            0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
+//!            0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
+//!            1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
+//!     COND   I+  -BWL RegN  RegD offs  offs offs | LDR/STR
+//!     COND    +  - WL RegN  RegD        xx  RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
+//!     COND    +  - WL RegN  RegD imm_   xx  imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
+//!     COND    +  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
+//!     COND        B   RegN  RegD            RegM | SWP
+//!     COND       imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
+//!     COND       CPOP RegN  RegD CPID  xxx  RegM | CDP with CoCPU Op4(CPOP) and CP Info xxx
+//!     COND       yyyL CprN  RegD CPID  xxx  CprM | MRC/MCR with CoCPU Op3(yyy) and CP Info xxx
+//!     COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
+//!     COND    ?  ???? ????  ???? ????  ???  ???? | Unknown Instruction
+//!     
+//! Full Instructions:
+//!     .... ....  .... ....  .... ....  .... ....
+//!     COND 0001  0010 1111  1111 1111  0001 RegM | BX #map: RegN => RegM
+//!     COND 101F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL with signed offset
+//!     COND 0000  00AS RegN  RegD RegS  1001 RegM | MUL/MLA #map: RegN <=> RegD
+//!     COND 0000  1UAS RegN  RegD RegS  1001 RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
+//!     COND 0001  0P00 1111  RegD 0000  0000 0000 | MRS
+//!     COND 0001  0P10 1001  1111 0000  0000 RegM | MSR by RegM
+//!     COND 00I1  0P10 1000  1111 shft  shft shft | MSR by imm
+//!     COND 00Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op(xxxx)
+//!     COND 01I+  -BWL RegN  RegD offs  offs offs | LDR/STR
+//!     COND 000+  -0WL RegN  RegD 0000  1xx1 RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
+//!     COND 000+  -1WL RegN  RegD imm_  1xx1 imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
+//!     COND 100+  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
+//!     COND 0001  0B00 RegN  RegD 0000  1001 RegM | SWP
+//!     COND 1111  imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
+//!     COND 1110  CPOP CprN  CprD CPID  xxx0 CprM | CDP with CoCPU Op4 CPOP and CP Info xxx
+//!     COND 1110  yyyL CprN  RegD CPID  xxx1 CprM | MRC/MCR with CoCPU Op3 yyy and CP Info xxx
+//!     COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
+//!     COND 011?  ???? ????  ???? ????  ???1 ???? | Unknown Instruction
+//! 
+//! Bit Flags:
+//!     I: 1=shftIsRegister,  0=shftIsImmediate
+//!     F: 1=BranchWithLink,  0=BranchWithoutLink
+//!     +: 1=PreIndexing,     0=PostIndexing
+//!     -: 1=AddOffset,       0=SubtractOffset
+//!     P: 1=SPSR,            0=CPSR
+//!     U: 1=Signed,          0=Unsigned
+//!     B: 1=TransferByte,    0=TransferWord
+//!     R: 1=ForceUserMode,   0=NoForceUserMode
+//!     N: 1=TransferAllRegs, 0=TransferSingleReg
+//!     A: 1=Accumulate,      0=DoNotAccumulate
+//!     W: 1=AutoIncrement,   0=NoWriteBack
+//!     S: 1=SetFlags,        0=DoNotSetFlags
+//!     L: 1=Load,            0=Store
+//!     
+//! Shift format:
+//!     I=0: shft shft shft
+//!          _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
+//!          RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
+//!          
+//!     I=1: shft shft shft
+//!          xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
+//! 
+//! Offset format:
+//!     I=0: offs offs offs
+//!          imm_ imm_ imm_ // Immediate unsigned offset.
+//!     
+//!     I=1: offs offs offs
+//!          _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
+//!          RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
+//! ```
+//!
+//! The `#map:` hints are a trick to make the code simpler.
+//! For example, in the manuals, the `MUL` instruction swaps
+//! the bit positions of the encoded `Rn` and `Rd` register.
+//! Why? I don't know! But I do know that I find it less
+//! confusing to write `Rn = Rd` instead of adding an extra
+//! `Rn_mul` and `Rd_mul` register decoding function.
 #![warn(missing_docs)]
 
 use std::mem;
@@ -14,22 +104,22 @@ use super::arm7tdmi::CPSR;
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum ArmCondition {
-    EQ = 0b0000, // Z set. EQual.
-    NE = 0b0001, // Z clear. Not Equal.
-    HS = 0b0010, // C set. Unsigned Higher or Same.
-    LO = 0b0011, // C clear. Unsigned LOwer.
-    MI = 0b0100, // N set. MInus, i.e. negative.
-    PL = 0b0101, // N clear. PLus, i.e. positive or zero.
-    VS = 0b0110, // V Set. Overflow.
-    VC = 0b0111, // V Clear. No Overflow.
-    HI = 0b1000, // C set and Z clear. Unsigned HIgher.
-    LS = 0b1001, // C clear or Z set. Unsigned Lower or Same.
-    GE = 0b1010, // N equals V. Greater than or Equal to.
-    LT = 0b1011, // N distinct from V. Less Than.
-    GT = 0b1100, // Z clear and N equals V. Greater Than.
-    LE = 0b1101, // Z set or N distinct from V.  Less than or Equal to.
-    AL = 0b1110, // ALways execute this instruction, i.e. no condition.
-    NV = 0b1111, // Reserved.
+    #[doc = "Z set. EQual."]                                       EQ = 0b0000,
+    #[doc = "Z clear. Not Equal."]                                 NE = 0b0001,
+    #[doc = "C set. Unsigned Higher or Same."]                     HS = 0b0010,
+    #[doc = "C clear. Unsigned LOwer."]                            LO = 0b0011,
+    #[doc = "N set. MInus, i.e. negative."]                        MI = 0b0100,
+    #[doc = "N clear. PLus, i.e. positive or zero."]               PL = 0b0101,
+    #[doc = "V Set. Overflow."]                                    VS = 0b0110,
+    #[doc = "V Clear. No Overflow."]                               VC = 0b0111,
+    #[doc = "C set and Z clear. Unsigned HIgher."]                 HI = 0b1000,
+    #[doc = "C clear or Z set. Unsigned Lower or Same."]           LS = 0b1001,
+    #[doc = "N equals V. Greater than or Equal to."]               GE = 0b1010,
+    #[doc = "N distinct from V. Less Than."]                       LT = 0b1011,
+    #[doc = "Z clear and N equals V. Greater Than."]               GT = 0b1100,
+    #[doc = "Z set or N distinct from V.  Less than or Equal to."] LE = 0b1101,
+    #[doc = "ALways execute this instruction, i.e. no condition."] AL = 0b1110,
+    #[doc = "Reserved."]                                           NV = 0b1111,
 }
 
 impl ArmCondition {
@@ -91,24 +181,24 @@ impl fmt::Display for ArmCondition {
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum ArmOpcode {
-    BX,
-    B_BL,
-    MUL_MLA,
-    MULL_MLAL,
-    DataProcessing,
-    MRS,
-    MSR_Reg,
-    MSR_Immediate,
-    LDR_STR,
-    LDRH_STRH_Reg,
-    LDRH_STRH_Immediate,
-    LDM_STM,
-    SWP,
-    SWI,
-    CDP,
-    MRC_MCR,
-    LDC_STC,
-    Unknown,
+    #[doc = "Branch and change ARM/THUMB state"]      BX,
+    #[doc = "Branch (with Link)"]                     B_BL,
+    #[doc = "Multiply (and accumulate)"]              MUL_MLA,
+    #[doc = "64-bit multiply (and accumulate)"]       MULL_MLAL,
+    #[doc = "See ArmDPOP"]                            DataProcessing,
+    #[doc = "Move CPSR/SPSR into a register"]         MRS,
+    #[doc = "Move a register into PSR flags"]         MSR_Reg,
+    #[doc = "Move an immediate into PSR flags"]       MSR_Immediate,
+    #[doc = "Load/store register to/from memory"]     LDR_STR,
+    #[doc = "Load/store halfwords"]                   LDRH_STRH_Reg,
+    #[doc = "Load/store halfwords"]                   LDRH_STRH_Immediate,
+    #[doc = "Load/store multiple registers"]          LDM_STM,
+    #[doc = "Swap register with memory"]              SWP,
+    #[doc = "Software interrupt with comment"]        SWI,
+    #[doc = "Co-processor data processing"]           CDP,
+    #[doc = "Move register to/from co-processor"]     MRC_MCR,
+    #[doc = "Load/store co-processor from/to memory"] LDC_STC,
+    #[doc = "Unknown instruction"]                    Unknown,
 }
 
 
@@ -116,22 +206,22 @@ pub enum ArmOpcode {
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum ArmDPOP {
-    AND = 0b0000,
-    EOR = 0b0001,
-    SUB = 0b0010,
-    RSB = 0b0011,
-    ADD = 0b0100,
-    ADC = 0b0101,
-    SBC = 0b0110,
-    RSC = 0b0111,
-    TST = 0b1000,
-    TEQ = 0b1001,
-    CMP = 0b1010,
-    CMN = 0b1011,
-    ORR = 0b1100,
-    MOV = 0b1101,
-    BIC = 0b1110,
-    MVN = 0b1111,
+    #[doc = "Bitwise AND"]                  AND = 0b0000,
+    #[doc = "Bitwise XOR"]                  EOR = 0b0001,
+    #[doc = "Subtraction"]                  SUB = 0b0010,
+    #[doc = "Reverse subtraction"]          RSB = 0b0011,
+    #[doc = "Addition"]                     ADD = 0b0100,
+    #[doc = "Add with carry"]               ADC = 0b0101,
+    #[doc = "Subtract with borrow"]         SBC = 0b0110,
+    #[doc = "Reverse subtract with borrow"] RSC = 0b0111,
+    #[doc = "Test bits"]                    TST = 0b1000,
+    #[doc = "Test bitwise equality"]        TEQ = 0b1001,
+    #[doc = "Compare"]                      CMP = 0b1010,
+    #[doc = "Compare negative"]             CMN = 0b1011,
+    #[doc = "Bitwise OR"]                   ORR = 0b1100,
+    #[doc = "Move value"]                   MOV = 0b1101,
+    #[doc = "Bit clear"]                    BIC = 0b1110,
+    #[doc = "Move bitwise negated value"]   MVN = 0b1111,
 }
 
 impl ArmDPOP {
@@ -177,87 +267,6 @@ impl fmt::Display for ArmDPOP {
     }
 }
 
-
-/*
-    Instruction Flags:
-        .... ....  .... ....  .... ....  .... ....
-        COND                                  RegM | BX #map: RegN => RegM
-        COND    F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL
-        COND         AS RegN  RegD RegS       RegM | MUL/MLA #map: RegN <=> RegD
-        COND        UAS RegN  RegD RegS       RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
-        COND        P         RegD                 | MRS
-        COND        P                         RegM | MSR by RegM
-        COND   I    P              shft  shft shft | MSR by Immediate...
-               0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
-               0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
-               1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
-        COND   Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op4(xxxx)...
-               0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
-               0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
-               1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
-        COND   I+  -BWL RegN  RegD offs  offs offs | LDR/STR
-        COND    +  - WL RegN  RegD        xx  RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
-        COND    +  - WL RegN  RegD imm_   xx  imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
-        COND    +  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
-        COND        B   RegN  RegD            RegM | SWP
-        COND       imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
-        COND       CPOP RegN  RegD CPID  xxx  RegM | CDP with CoCPU Op4(CPOP) and CP Info xxx
-        COND       yyyL CprN  RegD CPID  xxx  CprM | MRC/MCR with CoCPU Op3(yyy) and CP Info xxx
-        COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
-        COND    ?  ???? ????  ???? ????  ???  ???? | Unknown Instruction
-        
-    Full Instructions:
-        .... ....  .... ....  .... ....  .... ....
-        COND 0001  0010 1111  1111 1111  0001 RegM | BX #map: RegN => RegM
-        COND 101F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL with signed offset
-        COND 0000  00AS RegN  RegD RegS  1001 RegM | MUL/MLA #map: RegN <=> RegD
-        COND 0000  1UAS RegN  RegD RegS  1001 RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
-        COND 0001  0P00 1111  RegD 0000  0000 0000 | MRS
-        COND 0001  0P10 1001  1111 0000  0000 RegM | MSR by RegM
-        COND 00I1  0P10 1000  1111 shft  shft shft | MSR by imm
-        COND 00Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op(xxxx)
-        COND 01I+  -BWL RegN  RegD offs  offs offs | LDR/STR
-        COND 000+  -0WL RegN  RegD 0000  1xx1 RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
-        COND 000+  -1WL RegN  RegD imm_  1xx1 imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
-        COND 100+  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
-        COND 0001  0B00 RegN  RegD 0000  1001 RegM | SWP
-        COND 1111  imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
-        COND 1110  CPOP CprN  CprD CPID  xxx0 CprM | CDP with CoCPU Op4 CPOP and CP Info xxx
-        COND 1110  yyyL CprN  RegD CPID  xxx1 CprM | MRC/MCR with CoCPU Op3 yyy and CP Info xxx
-        COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
-        COND 011?  ???? ????  ???? ????  ???1 ???? | Unknown Instruction
-    
-    Bit Flags:
-        I: 1=shftIsRegister,  0=shftIsImmediate
-        F: 1=BranchWithLink,  0=BranchWithoutLink
-        +: 1=PreIndexing,     0=PostIndexing
-        -: 1=AddOffset,       0=SubtractOffset
-        P: 1=SPSR,            0=CPSR
-        U: 1=Signed,          0=Unsigned
-        B: 1=TransferByte,    0=TransferWord
-        R: 1=ForceUserMode,   0=NoForceUserMode
-        N: 1=TransferAllRegs, 0=TransferSingleReg
-        A: 1=Accumulate,      0=DoNotAccumulate
-        W: 1=AutoIncrement,   0=NoWriteBack
-        S: 1=SetFlags,        0=DoNotSetFlags
-        L: 1=Load,            0=Store
-        
-    Shift format:
-        I=0: shft shft shft
-             _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
-             RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
-             
-        I=1: shft shft shft
-             xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
-    
-    Offset format:
-        I=0: offs offs offs
-             imm_ imm_ imm_ // Immediate unsigned offset.
-        
-        I=1: offs offs offs
-             _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
-             RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
-*/
 
 /// A decoded ARM instruction providing lots
 /// of utility and decoding functions to ease
