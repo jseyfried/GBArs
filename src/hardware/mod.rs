@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::io;
 
-pub use self::cpu::{Arm7Tdmi, ArmInstruction, IoRegisters};
+use self::cpu::{Arm7Tdmi, IoRegisters};
 pub use self::error::*;
 pub use self::gamepak::*;
 

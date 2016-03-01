@@ -475,7 +475,7 @@ impl ArmInstruction {
     /// rotated byte.
     pub fn rotated_immediate(&self) -> i32 {
         let bits = (2 * ((self.raw >> 8) & 0b1111)) as u32;
-        (self.raw & 0xFF).rotate_right(bits) as i32
+        ((self.raw & 0xFF) as u32).rotate_right(bits) as i32
     }
     
     /// Determines whether an offset field is to be decoded
@@ -885,8 +885,9 @@ impl fmt::Display for ArmInstruction {
                 self.Rd(), self.Rn(), self.Rm(), self.Rs(),
             ),
             ArmOpcode::MSR_Immediate => {
-                try!(write!(f, "msr{}\t{}, ", cond, if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }));
-                self.display_shift(f)
+                try!(write!(f, "msr{}\t{}, ", cond, if self.is_accessing_spsr() { "SPSR_flg" } else { "CPSR_flg" }));
+                if !self.is_shift_field_register() { write!(f, "#{:#010X}", self.rotated_immediate() as u32) }
+                else { write!(f, "R{}", self.Rm()) }
             },
             ArmOpcode::DataProcessing => {
                 let op = self.dpop();
@@ -969,6 +970,14 @@ mod test {
         0b0000_00_0_1101_0_0001_0010_00000_00_0_0011_u32 as i32,
         0b0000_00_0_1110_0_0001_0010_00000_00_0_0011_u32 as i32,
         0b0000_00_0_1111_0_0001_0010_00000_00_0_0011_u32 as i32,
+        
+        // MRS and MSR.
+        0b0000_00010_0_001111_0001_000000000000_u32 as i32,
+        0b0000_00010_1_001111_0001_000000000000_u32 as i32,
+        0b0000_00010_0_101001111100000000_0010_u32 as i32,
+        0b0000_00_0_10_0_1010001111_00000000_0111_u32 as i32,
+        0b0000_00_0_10_1_1010001111_11111111_0111_u32 as i32,
+        0b0000_00_1_10_0_1010001111_0010_00001111_u32 as i32,
     ];
     
     pub const EXPECTED_DISASSEMBLY: &'static str = "\
@@ -1010,6 +1019,12 @@ mod test {
         0x01A12003\tmoveq\tR2, R3\n\
         0x01C12003\tbiceq\tR2, R1, R3\n\
         0x01E12003\tmvneq\tR2, R3\n\
+        0x010F1000\tmrseq\tR1, CPSR\n\
+        0x014F1000\tmrseq\tR1, SPSR\n\
+        0x0129F002\tmsreq\tCPSR, R2\n\
+        0x0128F007\tmsreq\tCPSR_flg, R7\n\
+        0x0168FFF7\tmsreq\tSPSR_flg, R7\n\
+        0x0328F20F\tmsreq\tCPSR_flg, #0xF0000000\n\
     ";
     
     #[test]
