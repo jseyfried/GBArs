@@ -37,10 +37,7 @@ impl Gba {
     
     //
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        use self::memory::Rom32;
-        let x = self.game_pak.load_rom_from_file(fp);
-        debug!("First ROM instruction:\n{}", ArmInstruction::decode(self.game_pak.rom().read_word(0xC0+0x48) as i32).unwrap());
-        x
+        self.game_pak.load_rom_from_file(fp)
     }
     
     /// Get a handle for the ROM's header.

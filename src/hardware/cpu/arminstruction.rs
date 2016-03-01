@@ -297,22 +297,22 @@ impl ArmInstruction {
         let op: ArmOpcode =
              if (raw & 0x0FFFFFF0) == 0x012FFF10 { ArmOpcode::BX }
         else if (raw & 0x0E000000) == 0x0A000000 { ArmOpcode::B_BL }
+        else if (raw & 0x0E000010) == 0x06000010 { ArmOpcode::Unknown }
         else if (raw & 0x0FC000F0) == 0x00000090 { ArmOpcode::MUL_MLA }
         else if (raw & 0x0F8000F0) == 0x00800090 { ArmOpcode::MULL_MLAL }
         else if (raw & 0x0FBF0FFF) == 0x010F0000 { ArmOpcode::MRS }
         else if (raw & 0x0FBFFFF0) == 0x0129F000 { ArmOpcode::MSR_Reg }
         else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Immediate }
-        else if (raw & 0x0C000000) == 0x00000000 { ArmOpcode::DataProcessing }
+        else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0C000000) == 0x04000000 { ArmOpcode::LDR_STR }
         else if (raw & 0x0E400F90) == 0x00000090 { ArmOpcode::LDRH_STRH_Reg }
         else if (raw & 0x0E400090) == 0x00400090 { ArmOpcode::LDRH_STRH_Immediate }
         else if (raw & 0x0E000000) == 0x08000000 { ArmOpcode::LDM_STM }
-        else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0F000000) == 0x0F000000 { ArmOpcode::SWI }
         else if (raw & 0x0F000010) == 0x0E000000 { ArmOpcode::CDP }
         else if (raw & 0x0F000010) == 0x0E000010 { ArmOpcode::MRC_MCR }
         else if (raw & 0x0E000000) == 0x0C000000 { ArmOpcode::LDC_STC }
-        else if (raw & 0x0E000010) == 0x06000010 { ArmOpcode::Unknown }
+        else if (raw & 0x0C000000) == 0x00000000 { ArmOpcode::DataProcessing }
         else {
             return Err(GbaError::InvalidArmInstruction(raw as u32));
         };
@@ -428,7 +428,8 @@ impl ArmInstruction {
     
     /// Gets a zero-extended 8-bit immediate to be used with LDC/STC.
     pub fn offset8(&self) -> i32 {
-        (self.raw & 0xFF) as i32
+        let off = (self.raw & 0xFF) as i32;
+        if self.is_offset_added() { off } else { -off }
     }
     
     /// Gets an 8-bit offset to be used with LDRH/STRH/LDRSB/LDRSH.
@@ -729,6 +730,10 @@ impl ArmInstruction {
     }
     
     
+    // Below here is just a bunch of
+    // messy functions to display an
+    // instruction disassembly on demand.
+    
     fn display_shift(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_shift_field_register() {
             try!(write!(f, "R{}", self.Rm()));
@@ -746,7 +751,8 @@ impl ArmInstruction {
         
         // Write the offset.
         if self.is_offset_field_immediate() {
-            try!(write!(f, "#{}{}", if self.is_offset_added() { "" } else { "+" }, self.raw & 0x0FFF));
+            let off: i32 = self.raw & 0x0FFF;
+            try!(write!(f, "#{}", if self.is_offset_added() { off } else { -off }));
         } else {
             try!(write!(f, "{}R{}",
                 if self.is_offset_added() { "+" } else { "-" }, self.Rm(),
@@ -779,38 +785,92 @@ impl ArmInstruction {
         if (self.raw & (1 << 4)) == 0 { write!(f, "#{}", (self.raw >> 7) & 0b1_1111) }
         else                          { write!(f, "R{}", self.Rs()) }
     }
+    
+    fn display_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{{"));
+        for i in 0 .. 16 {
+            if (self.raw & (1 << i)) != 0 { try!(write!(f, "R{}, ", i)); }
+        }
+        write!(f, "}}{}", if self.is_enforcing_user_mode() { "^" } else { "" })
+    }
 }
 
 
 
 impl fmt::Display for ArmInstruction {
-    /// Just a big mess of code generating a disassembly for
-    /// the current ARM instruction.
+    /// Writes a disassembly of the given instruction to a formatter.
+    ///
+    /// # Params
+    /// - `f`: The formatter to write to.
+    ///
+    /// # Returns
+    /// - `Ok` if everything succeeded.
+    /// - `Err` in case of an error.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:#08X}\t", self.raw as u32));
+        try!(write!(f, "{:#010X}\t", self.raw as u32));
         
         let cond = self.condition();
         
         match self.op {
+            ArmOpcode::Unknown        => write!(f, "<unknown>"),
+            ArmOpcode::SWI            => write!(f, "swi{}\t#{:#08X}", cond, self.comment()),
             ArmOpcode::BX             => write!(f, "bx{}\tR{}", cond, self.Rm()),
-            ArmOpcode::B_BL           => write!(f, "b{}{}\t{}", if self.is_branch_with_link() { "l" } else { "" }, cond, 8+self.branch_offset()),
+            ArmOpcode::B_BL           => write!(f, "b{}{}\t#{}", if self.is_branch_with_link() { "l" } else { "" }, cond, 8+self.branch_offset()),
             ArmOpcode::MRS            => write!(f, "mrs{}\tR{}, {}", cond, self.Rd(), if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }),
             ArmOpcode::MSR_Reg        => write!(f, "msr{}\t{}, R{}", cond, if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }, self.Rm()),
-            ArmOpcode::LDR_STR        => {
+            ArmOpcode::LDRH_STRH_Reg  => write!(f, "{}{}{}\tR{}, [R{}{}, {}R{}{}{}",
+                if self.is_load() { "ldr" } else { "str" },
+                match (self.raw >> 5) & 0b11 {
+                    1 => "h",
+                    2 => "sb",
+                    3 => "sh",
+                    _ => unimplemented!(),
+                }, cond,
+                self.Rd(), self.Rn(), if self.is_pre_indexed() { "" } else { "]" },
+                if self.is_offset_added() { "" } else { "+" }, self.Rm(),
+                if self.is_pre_indexed() { "]" } else { "" },
+                if self.is_auto_incrementing() { "!" } else { "" }
+            ),
+            ArmOpcode::LDRH_STRH_Immediate => write!(f, "{}{}{}\tR{}, [R{}{}, #{}{}{}{}",
+                if self.is_load() { "ldr" } else { "str" },
+                match (self.raw >> 5) & 0b11 {
+                    1 => "h",
+                    2 => "sb",
+                    3 => "sh",
+                    _ => unimplemented!(),
+                }, cond,
+                self.Rd(), self.Rn(), if self.is_pre_indexed() { "" } else { "]" },
+                if self.is_offset_added() { "" } else { "+" }, self.split_offset8(),
+                if self.is_pre_indexed() { "]" } else { "" },
+                if self.is_auto_incrementing() { "!" } else { "" }
+            ),
+            ArmOpcode::LDR_STR => {
                 try!(write!(f, "{}{}{}{}\tR{}, ",
-                    if self.is_load() { "ldr" } else { "str" }, cond,
-                    if self.is_transfering_bytes() { "b" } else { "" },
+                    if self.is_load() { "ldr" } else { "str" },
+                    if self.is_transfering_bytes() { "b" } else { "" }, cond,
                     if self.is_pre_indexed() { "" } else { "t" },
                     self.Rd()
                 ));
                 self.display_offset(f)
             },
-            
-            
-            ArmOpcode::MUL_MLA        => {
-                try!(write!(f, "{}{}{}\t, R{}, R{}, R{}",
+            ArmOpcode::LDM_STM => {
+                try!(write!(f, "{}{}{}{}\tR{}{}, ",
+                    if self.is_load() { "ldm" } else { "stm" },
+                    if self.is_offset_added() { "i" } else { "d" },
+                    if self.is_pre_indexed()  { "b" } else { "a" },
+                    cond, self.Rn(),
+                    if self.is_auto_incrementing() { "!" } else { "" }
+                ));
+                self.display_register_list(f)
+            },
+            ArmOpcode::SWP => write!(f, "swp{}{}\tR{}, R{}, [R{}]",
+                if self.is_transfering_bytes() { "b" } else { "" },
+                cond, self.Rd(), self.Rm(), self.Rn()
+            ),
+            ArmOpcode::MUL_MLA => {
+                try!(write!(f, "{}{}{}\tR{}, R{}, R{}",
                     if self.is_accumulating() { "mla" } else { "mul" },
-                    cond, if self.is_setting_flags() { "s" } else { "" },
+                    if self.is_setting_flags() { "s" } else { "" }, cond,
                     self.Rn(), self.Rm(), self.Rs(),
                 ));
                 if self.is_accumulating() {
@@ -818,13 +878,13 @@ impl fmt::Display for ArmInstruction {
                 }
                 else { Ok(()) }
             },
-            ArmOpcode::MULL_MLAL      => write!(f, "{}{}{}{}\t, R{}, R{}, R{}, R{}",
-                    if self.is_signed() { "s" } else { "u" },
-                    if self.is_accumulating() { "mlal" } else { "mull" },
-                    cond, if self.is_setting_flags() { "s" } else { "" },
-                    self.Rd(), self.Rn(), self.Rm(), self.Rs(),
+            ArmOpcode::MULL_MLAL => write!(f, "{}{}{}{}\tR{}, R{}, R{}, R{}",
+                if self.is_signed() { "s" } else { "u" },
+                if self.is_accumulating() { "mlal" } else { "mull" },
+                if self.is_setting_flags() { "s" } else { "" }, cond,
+                self.Rd(), self.Rn(), self.Rm(), self.Rs(),
             ),
-            ArmOpcode::MSR_Immediate  => {
+            ArmOpcode::MSR_Immediate => {
                 try!(write!(f, "msr{}\t{}, ", cond, if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }));
                 self.display_shift(f)
             },
@@ -835,8 +895,134 @@ impl fmt::Display for ArmInstruction {
                 if !op.is_move() { try!(write!(f, "R{}, ", self.Rn())); }
                 self.display_shift(f)
             },
-            
-            _ => unimplemented!(),
+            ArmOpcode::CDP => write!(f, "cdp{}\tP{}, {}, C{}, C{}, C{}, {}",
+                cond, self.Rs(), (self.raw >> 20) & 0b1111, self.Rd(),
+                self.Rn(), self.Rm(), (self.raw >> 5) & 0b0111
+            ),
+            ArmOpcode::LDC_STC => write!(f, "{}{}{}\tP{}, C{}, [R{}{}, #{}{}{}",
+                if self.is_load() { "ldc" } else { "stc" },
+                if self.is_register_block_transfer() { "l" } else { "" },
+                cond, self.Rs(), self.Rd(), self.Rn(),
+                if self.is_pre_indexed() { "" } else { "]" },
+                self.offset8(),
+                if self.is_pre_indexed() { "]" } else { "" },
+                if self.is_auto_incrementing() { "!" } else { "" }
+            ),
+            ArmOpcode::MRC_MCR => write!(f, "{}{}\tP{}, {}, R{}, C{}, C{}, {}",
+                if self.is_load() { "mrc" } else { "mcr" }, cond, self.Rs(),
+                (self.raw >> 21) & 0b0111, self.Rd(), self.Rn(), self.Rm(),
+                (self.raw >>  5) & 0b0111
+            ),
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use std::fmt::Write;
+    
+    pub const INSTRUCTIONS_RAW: &'static [i32] = &[
+        // Use SWI to check condition decoding.
+        0b0000_1111_011101110111011101110111_u32 as i32,
+        0b0001_1111_011101110111011101110111_u32 as i32,
+        0b0010_1111_011101110111011101110111_u32 as i32,
+        0b0011_1111_011101110111011101110111_u32 as i32,
+        0b0100_1111_011101110111011101110111_u32 as i32,
+        0b0101_1111_011101110111011101110111_u32 as i32,
+        0b0110_1111_011101110111011101110111_u32 as i32,
+        0b0111_1111_011101110111011101110111_u32 as i32,
+        0b1000_1111_011101110111011101110111_u32 as i32,
+        0b1001_1111_011101110111011101110111_u32 as i32,
+        0b1010_1111_011101110111011101110111_u32 as i32,
+        0b1011_1111_011101110111011101110111_u32 as i32,
+        0b1100_1111_011101110111011101110111_u32 as i32,
+        0b1101_1111_011101110111011101110111_u32 as i32,
+        0b1110_1111_011101110111011101110111_u32 as i32,
+        0b1111_1111_011101110111011101110111_u32 as i32,
+        
+        // Test BX, B, BL.
+        0b0000_000100101111111111110001_0111_u32 as i32,
+        0b0000_101_0_111111111111111111111101_u32 as i32,
+        0b0000_101_0_000000000000000000000001_u32 as i32,
+        0b0000_101_1_111111111111111111111101_u32 as i32,
+        0b0000_101_1_000000000000000000000001_u32 as i32,
+        
+        // Test Unknown.
+        0b0000_011_01100110011001100110_1_0110_u32 as i32,
+        
+        // Data Processing.
+        0b0000_00_1_0000_0_0001_0010_0011_01000101_u32 as i32,
+        0b0000_00_0_0001_1_0001_0010_00111_00_0_0011_u32 as i32,
+        0b0000_00_0_0010_0_0001_0010_00111_01_0_0011_u32 as i32,
+        0b0000_00_0_0011_0_0001_0010_00111_10_0_0011_u32 as i32,
+        0b0000_00_0_0100_0_0001_0010_00111_11_0_0011_u32 as i32,
+        0b0000_00_0_0101_0_0001_0010_00000_11_0_0011_u32 as i32,
+        0b0000_00_0_0110_0_0001_0010_00000_00_0_0011_u32 as i32,
+        0b0000_00_0_0111_0_0001_0010_0100_0_00_1_0011_u32 as i32,
+        0b0000_00_0_1000_0_0001_0010_0100_0_01_1_0011_u32 as i32,
+        0b0000_00_0_1001_0_0001_0010_0100_0_10_1_0011_u32 as i32,
+        0b0000_00_0_1010_0_0001_0010_0100_0_11_1_0011_u32 as i32,
+        0b0000_00_0_1011_0_0001_0010_00000_00_0_0011_u32 as i32,
+        0b0000_00_0_1100_0_0001_0010_00000_00_0_0011_u32 as i32,
+        0b0000_00_0_1101_0_0001_0010_00000_00_0_0011_u32 as i32,
+        0b0000_00_0_1110_0_0001_0010_00000_00_0_0011_u32 as i32,
+        0b0000_00_0_1111_0_0001_0010_00000_00_0_0011_u32 as i32,
+    ];
+    
+    pub const EXPECTED_DISASSEMBLY: &'static str = "\
+        0x0F777777\tswieq\t#0x777777\n\
+        0x1F777777\tswine\t#0x777777\n\
+        0x2F777777\tswihs\t#0x777777\n\
+        0x3F777777\tswilo\t#0x777777\n\
+        0x4F777777\tswimi\t#0x777777\n\
+        0x5F777777\tswipl\t#0x777777\n\
+        0x6F777777\tswivs\t#0x777777\n\
+        0x7F777777\tswivc\t#0x777777\n\
+        0x8F777777\tswihi\t#0x777777\n\
+        0x9F777777\tswils\t#0x777777\n\
+        0xAF777777\tswige\t#0x777777\n\
+        0xBF777777\tswilt\t#0x777777\n\
+        0xCF777777\tswigt\t#0x777777\n\
+        0xDF777777\tswile\t#0x777777\n\
+        0xEF777777\tswi\t#0x777777\n\
+        0xFF777777\tswinv\t#0x777777\n\
+        0x012FFF17\tbxeq\tR7\n\
+        0x0AFFFFFD\tbeq\t#-4\n\
+        0x0A000001\tbeq\t#12\n\
+        0x0BFFFFFD\tbleq\t#-4\n\
+        0x0B000001\tbleq\t#12\n\
+        0x06CCCCD6\t<unknown>\n\
+        0x02012345\tandeq\tR2, R1, #335544321\n\
+        0x00312383\teoreqs\tR2, R1, R3, lsl #7\n\
+        0x004123A3\tsubeq\tR2, R1, R3, lsr #7\n\
+        0x006123C3\trsbeq\tR2, R1, R3, asr #7\n\
+        0x008123E3\taddeq\tR2, R1, R3, ror #7\n\
+        0x00A12063\tadceq\tR2, R1, R3, rrx\n\
+        0x00C12003\tsbceq\tR2, R1, R3\n\
+        0x00E12413\trsceq\tR2, R1, R3, lsl R4\n\
+        0x01012433\ttsteq\tR1, R3, lsr R4\n\
+        0x01212453\tteqeq\tR1, R3, asr R4\n\
+        0x01412473\tcmpeq\tR1, R3, ror R4\n\
+        0x01612003\tcmneq\tR1, R3\n\
+        0x01812003\torreq\tR2, R1, R3\n\
+        0x01A12003\tmoveq\tR2, R3\n\
+        0x01C12003\tbiceq\tR2, R1, R3\n\
+        0x01E12003\tmvneq\tR2, R3\n\
+    ";
+    
+    #[test]
+    pub fn instruction_disassembly() {
+        let mut dis = String::new();
+        
+        for inst in self::INSTRUCTIONS_RAW {
+            writeln!(dis, "{}", super::ArmInstruction::decode(*inst).unwrap()).unwrap();
+        }
+        
+        println!("\n========================\nGenerated Disassembly:\n\n{}", dis);
+        println!("\n========================\nExpected Disassembly:\n\n{}", self::EXPECTED_DISASSEMBLY);
+        
+        assert!(dis == self::EXPECTED_DISASSEMBLY);
     }
 }
