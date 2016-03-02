@@ -10,6 +10,9 @@
 //!
 //! Emulation utilities for these CPUs and their instruction
 //! sets are implemented here.
+#![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
+#![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
+#![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
 pub use self::arm7tdmi::*;

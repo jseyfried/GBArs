@@ -91,6 +91,9 @@
 //! Why? I don't know! But I do know that I find it less
 //! confusing to write `Rn = Rd` instead of adding an extra
 //! `Rn_mul` and `Rd_mul` register decoding function.
+#![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
+#![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
+#![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
 use std::mem;

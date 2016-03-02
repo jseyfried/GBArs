@@ -1,5 +1,8 @@
 // License below.
 //! GBArs' logging implementation.
+#![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
+#![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
+#![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
 use std::io::Write;
@@ -22,7 +25,8 @@ impl Log for ConsoleFileLogger {
         let min_level = if self.verbose { LogLevel::Trace } else { LogLevel::Info };
         metadata.level() <= min_level
     }
-
+    
+    #[cfg_attr(feature="clippy", allow(print_stdout))]
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
             // Prepare some common message sections in case of colouring.
