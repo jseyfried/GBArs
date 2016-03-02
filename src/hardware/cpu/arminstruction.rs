@@ -778,7 +778,7 @@ impl ArmInstruction {
         // Add bracket if pre-indexed.
         write!(f, "{}{}",
             if self.is_pre_indexed() { "]" } else { "" },
-            if self.is_auto_incrementing() { "!" } else { "" }
+            if self.is_auto_incrementing() & !self.is_pre_indexed() { "!" } else { "" }
         )
     }
 
@@ -863,7 +863,7 @@ impl fmt::Display for ArmInstruction {
                 try!(write!(f, "{}{}{}{}\tR{}, ",
                     if self.is_load() { "ldr" } else { "str" },
                     if self.is_transfering_bytes() { "b" } else { "" }, cond,
-                    if self.is_pre_indexed() { "" } else { "t" },
+                    if !self.is_pre_indexed() & self.is_auto_incrementing() { "t" } else { "" },
                     self.Rd()
                 ));
                 self.display_offset(f)
@@ -993,6 +993,25 @@ mod test {
         0b0000_00_0_10_0_1010001111_00000000_0111_u32 as i32,
         0b0000_00_0_10_1_1010001111_11111111_0111_u32 as i32,
         0b0000_00_1_10_0_1010001111_0010_00001111_u32 as i32,
+
+        // Test MUL and MLA.
+        0b0000_000000_0_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_000000_0_1_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_000000_1_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_000000_1_1_0001_0010_0011_1001_0100_u32 as i32,
+
+        // Test MULL and MLAL.
+        0b0000_00001_0_0_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_0_0_1_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_0_1_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_0_1_1_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_1_0_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_1_0_1_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_1_1_0_0001_0010_0011_1001_0100_u32 as i32,
+        0b0000_00001_1_1_1_0001_0010_0011_1001_0100_u32 as i32,
+
+        // Test LDR and STR.
+        0b0000_01_0_0_0_0_0_0_0001_0010_011101110111_u32 as i32,
     ];
 
     pub const EXPECTED_DISASSEMBLY: &'static str = "\
@@ -1040,6 +1059,19 @@ mod test {
         0x0128F007\tmsreq\tCPSR_flg, R7\n\
         0x0168FFF7\tmsreq\tSPSR_flg, R7\n\
         0x0328F20F\tmsreq\tCPSR_flg, #0xF0000000\n\
+        0x00012394\tmuleq\tR1, R4, R3\n\
+        0x00112394\tmulseq\tR1, R4, R3\n\
+        0x00212394\tmlaeq\tR1, R4, R3, R2\n\
+        0x00312394\tmlaseq\tR1, R4, R3, R2\n\
+        0x00812394\tumulleq\tR2, R1, R4, R3\n\
+        0x00912394\tumullseq\tR2, R1, R4, R3\n\
+        0x00A12394\tumlaleq\tR2, R1, R4, R3\n\
+        0x00B12394\tumlalseq\tR2, R1, R4, R3\n\
+        0x00C12394\tsmulleq\tR2, R1, R4, R3\n\
+        0x00D12394\tsmullseq\tR2, R1, R4, R3\n\
+        0x00E12394\tsmlaleq\tR2, R1, R4, R3\n\
+        0x00F12394\tsmlalseq\tR2, R1, R4, R3\n\
+        0x04012777\tstreq\tR2, [R1], #-1911\n\
     ";
 
     #[test]
@@ -1050,8 +1082,8 @@ mod test {
             writeln!(dis, "{}", super::ArmInstruction::decode(*inst).unwrap()).unwrap();
         }
 
-        println!("\n========================\nGenerated Disassembly:\n\n{}", dis);
         println!("\n========================\nExpected Disassembly:\n\n{}", self::EXPECTED_DISASSEMBLY);
+        println!("\n========================\nGenerated Disassembly:\n\n{}", dis);
 
         assert!(dis == self::EXPECTED_DISASSEMBLY);
     }
