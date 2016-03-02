@@ -1,4 +1,5 @@
 // License below.
+//! Implements emulation utilities for the GBA's main CPU, the ARM7TDMI.
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
@@ -22,13 +23,13 @@ pub enum State {
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum Mode {
-    User = 0,
-    FIQ,
-    IRQ,
-    Supervisor,
-    Abort,
-    Undefined,
-    System,
+    #[doc = "CPU mode for running normal user code."]                  User = 0,
+    #[doc = "CPU mode for handling fast interrupts."]                  FIQ,
+    #[doc = "CPU mode for handling normal interrupts."]                IRQ,
+    #[doc = "CPU mode for executing supervisor code."]                 Supervisor,
+    #[doc = "CPU mode entered if memory lookups are aborted."]         Abort,
+    #[doc = "CPU mode entered if executing an undefined instruction."] Undefined,
+    #[doc = "CPU mode for executing system code."]                     System,
 }
 
 impl Mode {
@@ -51,14 +52,14 @@ impl Mode {
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum Exception {
-    Reset,
-    UndefinedInstruction,
-    SoftwareInterrupt,
-    PrefetchAbort,
-    DataAbort,
-    AddressExceeds26Bit,
-    NormalInterrupt,
-    FastInterrupt,
+    #[doc = "Exception due to resetting the CPU."]                Reset,
+    #[doc = "Exception due to executing undefined instructions."] UndefinedInstruction,
+    #[doc = "Exception due to executing SWI."]                    SoftwareInterrupt,
+    #[doc = "Instruction prefetching aborted."]                   PrefetchAbort,
+    #[doc = "Data prefetching aborted."]                          DataAbort,
+    #[doc = "Exception due to resolving large addresses."]        AddressExceeds26Bit,
+    #[doc = "Exception due to a normal hardware interrupt."]      NormalInterrupt,
+    #[doc = "Exception due to a fast hardware interrupt."]        FastInterrupt,
 }
 
 impl Exception {

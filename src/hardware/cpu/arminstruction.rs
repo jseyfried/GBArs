@@ -684,7 +684,7 @@ impl ArmInstruction {
             return (bit31 | (((a as u32) >> 1) as i32), 0 != (a & 0b1));
         }
 
-        // A shift by Rs==0 just returns a without `a` new carry flag.
+        // A shift by Rs==0 just returns `a` without a new carry flag.
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
             ((self.raw >> 7) & 0b1_1111) as u32
         } else {
