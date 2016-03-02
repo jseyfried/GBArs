@@ -18,13 +18,14 @@ pub mod memory;
 pub mod gamepak;
 pub mod error;
 
+
 pub struct Gba {
     //
     cpu: Arm7Tdmi,
-    
+
     //
     ioregs: IoRegisters,
-    
+
     //
     game_pak: GamePak,
 }
@@ -38,7 +39,7 @@ impl Gba {
             game_pak: GamePak::new(),
         }
     }
-    
+
     /// Loads a ROM from a file.
     ///
     /// Only ROMs up to 32MiB in size are valid.
@@ -56,7 +57,7 @@ impl Gba {
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
         self.game_pak.load_rom_from_file(fp)
     }
-    
+
     /// Get a handle for the ROM's header.
     ///
     /// This handle is used to query all kinds

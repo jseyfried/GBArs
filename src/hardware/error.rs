@@ -16,13 +16,13 @@ pub enum GbaError {
     ///
     /// This is not to be confused with an undefined instruction.
     InvalidArmInstruction(u32),
-    
+
     /// An invalid THUMB instruction has been decoded.
     InvalidThumbInstruction(u16),
-    
+
     /// An instruction using the reserved `NV` condition has been executed.
     ReservedArmConditionNV,
-    
+
     /// Tried accessing an invalid physical address.
     InvalidPhysicalAddress(u32),
 }

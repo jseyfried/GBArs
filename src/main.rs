@@ -44,22 +44,22 @@ pub struct CmdLineArgs {
     /// The ROM file will be loaded immediately after
     /// initialising the emulator.
     pub rom_file_path: Option<PathBuf>,
-    
+
     /// Accepts `--log FILE`, defaults to `"./GBArs.log"`.
     pub log_file_path: PathBuf,
-    
+
     /// Accepts `--dasm-arm INST`.
     ///
     /// Disassembles a single ARM instruction and
     /// logs the result.
     pub single_disasm_arm: Option<String>,
-    
+
     /// Accepts `-v` or `--verbose` as `true`.
     ///
     /// If `false`, log messages of log level *debug*
     /// and *trace* will be ignored.
     pub verbose: bool,
-    
+
     /// Accepts `-c` or `--with-colour` as `true`, which is the default value.
     ///
     /// Also accepts `-k` or `--without-colour` as `false`.
@@ -88,7 +88,7 @@ fn main() {
     parse_command_line(&mut args);
     configure_logging(&args);
     handle_oneshot_commands(&args);
-    
+
     // Prepare the GBA.
     let mut gba = hardware::Gba::new();
     configure_gba_from_command_line(&mut gba, &args);

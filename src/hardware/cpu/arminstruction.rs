@@ -31,7 +31,7 @@
 //!     COND       yyyL CprN  RegD CPID  xxx  CprM | MRC/MCR with CoCPU Op3(yyy) and CP Info xxx
 //!     COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
 //!     COND    ?  ???? ????  ???? ????  ???  ???? | Unknown Instruction
-//!     
+//!
 //! Full Instructions:
 //!     .... ....  .... ....  .... ....  .... ....
 //!     COND 0001  0010 1111  1111 1111  0001 RegM | BX #map: RegN => RegM
@@ -52,7 +52,7 @@
 //!     COND 1110  yyyL CprN  RegD CPID  xxx1 CprM | MRC/MCR with CoCPU Op3 yyy and CP Info xxx
 //!     COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
 //!     COND 011?  ???? ????  ???? ????  ???1 ???? | Unknown Instruction
-//! 
+//!
 //! Bit Flags:
 //!     I: 1=shftIsRegister,  0=shftIsImmediate
 //!     F: 1=BranchWithLink,  0=BranchWithoutLink
@@ -67,19 +67,19 @@
 //!     W: 1=AutoIncrement,   0=NoWriteBack
 //!     S: 1=SetFlags,        0=DoNotSetFlags
 //!     L: 1=Load,            0=Store
-//!     
+//!
 //! Shift format:
 //!     I=0: shft shft shft
 //!          _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
 //!          RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
-//!          
+//!
 //!     I=1: shft shft shft
 //!          xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
-//! 
+//!
 //! Offset format:
 //!     I=0: offs offs offs
 //!          imm_ imm_ imm_ // Immediate unsigned offset.
-//!     
+//!
 //!     I=1: offs offs offs
 //!          _imm _op0 RegM // RegM = RegM SHIFT(op) _imm_
 //!          RegS 0op1 RegM // RegM = RegM SHIFT(op) RegS
@@ -236,7 +236,7 @@ impl ArmDPOP {
             _ => false,
         }
     }
-    
+
     /// Checks whether this instruction is a
     /// move instruction.
     pub fn is_move(self) -> bool {
@@ -285,7 +285,7 @@ impl ArmInstruction {
     /// A raw 32-bit pseudo NOP instruction.
     pub const NOP_RAW: i32 = 0b0000_00_0_1101_0_0000_0000_00000000_0000_u32 as i32;
     //                         COND DP I MOV  S  Rn   Rd   LSL(0)   Rm
-    
+
     /// Creates a pseudo NOP instruction.
     ///
     /// # Returns
@@ -294,7 +294,7 @@ impl ArmInstruction {
     pub fn nop() -> ArmInstruction {
         ArmInstruction { raw: ArmInstruction::NOP_RAW, op: ArmOpcode::DataProcessing }
     }
-    
+
     /// Decodes a raw 32-bit integer as an ARM instruction.
     ///
     /// Unknown instructions do not result in a decoding
@@ -331,47 +331,47 @@ impl ArmInstruction {
         else {
             return Err(GbaError::InvalidArmInstruction(raw as u32));
         };
-        
+
         // Done decoding!
         Ok(ArmInstruction { raw: raw, op: op })
     }
-    
+
     /// Get the condition field of the ARM instruction.
     pub fn condition(&self) -> ArmCondition {
         let c = ((self.raw >> 28) & 0b1111) as u8;
         unsafe { mem::transmute(c) }
     }
-    
+
     /// Get the data processing opcode field of the ARM instruction.
     pub fn dpop(&self) -> ArmDPOP {
         let o = ((self.raw >> 21) & 0b1111) as u8;
         unsafe { mem::transmute(o) }
     }
-    
+
     /// Get the index of register `Rn`.
     #[allow(non_snake_case)]
     pub fn Rn(&self) -> usize {
         ((self.raw >> 16) & 0b1111) as usize
     }
-    
+
     /// Get the index of register `Rd`.
     #[allow(non_snake_case)]
     pub fn Rd(&self) -> usize {
         ((self.raw >> 12) & 0b1111) as usize
     }
-    
+
     /// Get the index of register `Rs`.
     #[allow(non_snake_case)]
     pub fn Rs(&self) -> usize {
         ((self.raw >> 8) & 0b1111) as usize
     }
-    
+
     /// Get the index of register `Rm`.
     #[allow(non_snake_case)]
     pub fn Rm(&self) -> usize {
         ((self.raw >> 0) & 0b1111) as usize
     }
-    
+
     /// Calculates a shifted operand without carry flag.
     ///
     /// In case the operand is a rotated immediate, this
@@ -390,7 +390,7 @@ impl ArmInstruction {
         }
         else { self.rotated_immediate() }
     }
-    
+
     /// Calculates a shifted operand with carry flag.
     ///
     /// In case the operand is a rotated immediate, this
@@ -410,7 +410,7 @@ impl ArmInstruction {
         }
         else { (self.rotated_immediate(), false) }
     }
-    
+
     /// Calculates a shifted offset for a base address.
     ///
     /// In case the offset is a rotated immediate, this
@@ -437,16 +437,16 @@ impl ArmInstruction {
         } else {
             self.calculate_shifted_register(regs, carry)
         };
-        
+
         if self.is_offset_added() { offs } else { -offs }
     }
-    
+
     /// Gets a zero-extended 8-bit immediate to be used with LDC/STC.
     pub fn offset8(&self) -> i32 {
         let off = (self.raw & 0xFF) as i32;
         if self.is_offset_added() { off } else { -off }
     }
-    
+
     /// Gets an 8-bit offset to be used with LDRH/STRH/LDRSB/LDRSH.
     ///
     /// The offset has been split into two nibbles. This function
@@ -457,22 +457,22 @@ impl ArmInstruction {
         let off = ((self.raw >> 4) & 0xF0) | (self.raw & 0x0F);
         if self.is_offset_added() { off } else { -off }
     }
-    
+
     /// Get the 24-bit sign-extended branch offset.
     pub fn branch_offset(&self) -> i32 {
         ((self.raw << 8) as i32) >> 6
     }
-    
+
     /// Get the 24-bit comment field of an `SWI` instruction.
     pub fn comment(&self) -> i32 {
         (self.raw & 0x00FFFFFF) as i32
     }
-    
+
     /// Get a 16-bit bitmap, where bit N corresponds to GPR N.
     pub fn register_map(&self) -> u16 {
         (self.raw & 0xFFFF) as u16
     }
-    
+
     /// Determines whether a shift field is to be decoded as
     /// rotated immediate value or as a shifted register value.
     ///
@@ -482,7 +482,7 @@ impl ArmInstruction {
     pub fn is_shift_field_register(&self) -> bool {
         (self.raw & (1 << 25)) == 0
     }
-    
+
     /// Decodes a rotated immediate value.
     ///
     /// # Returns
@@ -492,7 +492,7 @@ impl ArmInstruction {
         let bits = (2 * ((self.raw >> 8) & 0b1111)) as u32;
         ((self.raw & 0xFF) as u32).rotate_right(bits) as i32
     }
-    
+
     /// Determines whether an offset field is to be decoded
     /// as shifted registers or as an immediate value.
     ///
@@ -503,7 +503,7 @@ impl ArmInstruction {
     pub fn is_offset_field_immediate(&self) -> bool {
         self.is_shift_field_register()
     }
-    
+
     /// Checks whether this is a `B` or `BL` instruction.
     ///
     /// # Returns:
@@ -512,7 +512,7 @@ impl ArmInstruction {
     pub fn is_branch_with_link(&self) -> bool {
         (self.raw & (1 << 24)) != 0
     }
-    
+
     /// Checks whether an offset register should be
     /// pre-indexed or post-indexed.
     ///
@@ -522,7 +522,7 @@ impl ArmInstruction {
     pub fn is_pre_indexed(&self) -> bool {
         (self.raw & (1 << 24)) != 0
     }
-    
+
     /// Checks whether a given offset should be added
     /// or subtracted from a base address.
     ///
@@ -532,7 +532,7 @@ impl ArmInstruction {
     pub fn is_offset_added(&self) -> bool {
         (self.raw & (1 << 23)) != 0
     }
-    
+
     /// Checks whether the given instruction accesses CPSR
     /// or the current SPSR.
     ///
@@ -542,7 +542,7 @@ impl ArmInstruction {
     pub fn is_accessing_spsr(&self) -> bool {
         (self.raw & (1 << 22)) != 0
     }
-    
+
     /// Checks whether the given long instruction should
     /// act as a signed or unsigned operation.
     ///
@@ -552,7 +552,7 @@ impl ArmInstruction {
     pub fn is_signed(&self) -> bool {
         (self.raw & (1 << 22)) != 0
     }
-    
+
     /// Checks whether a data transfer instruction should
     /// transfer bytes or words.
     ///
@@ -562,7 +562,7 @@ impl ArmInstruction {
     pub fn is_transfering_bytes(&self) -> bool {
         (self.raw & (1 << 22)) != 0
     }
-    
+
     /// Checks whether register block transfer should be
     /// done in user mode.
     ///
@@ -572,7 +572,7 @@ impl ArmInstruction {
     pub fn is_enforcing_user_mode(&self) -> bool {
         (self.raw & (1 << 22)) != 0
     }
-    
+
     /// Checks whether a single register or a block of
     /// registers should be transfered to or from a
     /// co-processor.
@@ -583,7 +583,7 @@ impl ArmInstruction {
     pub fn is_register_block_transfer(&self) -> bool {
         (self.raw & (1 << 22)) != 0
     }
-    
+
     /// Checks whether a multiply instruction should
     /// accumulate or not.
     ///
@@ -593,13 +593,13 @@ impl ArmInstruction {
     pub fn is_accumulating(&self) -> bool {
         (self.raw & (1 << 21)) != 0
     }
-    
+
     /// Checks whether the current instruction writes
     /// a calculated address back to the base register.
     pub fn is_auto_incrementing(&self) -> bool {
         (self.raw & (1 << 21)) != 0
     }
-    
+
     /// Checks whether the given instruction updates the
     /// ZNCV status flags of CPSR.
     ///
@@ -609,7 +609,7 @@ impl ArmInstruction {
     pub fn is_setting_flags(&self) -> bool {
         (self.raw & (1 << 20)) != 0
     }
-    
+
     /// Checks whether the given instruction is a
     /// load or store instruction.
     ///
@@ -619,7 +619,7 @@ impl ArmInstruction {
     pub fn is_load(&self) -> bool {
         (self.raw & (1 << 20)) != 0
     }
-    
+
     /// Calculates a shifted register operand without
     /// calculating the carry flag.
     ///
@@ -635,13 +635,13 @@ impl ArmInstruction {
         // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
         if (self.raw & 0x0FF0) == 0 { return a; }
-        
+
         // Decode RRX?
         if (self.raw & 0x0FF0) == 0x60 {
             let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
             return bit31 | (((a as u32) >> 1) as i32);
         }
-        
+
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
             ((self.raw >> 7) & 0b1_1111) as u32
         } else {
@@ -650,7 +650,7 @@ impl ArmInstruction {
                 Err(y) => { return y; },
             }
         };
-        
+
         match (self.raw >> 5) & 0b11 {
             0 => a.wrapping_shl(b),
             1 => (a as u32).wrapping_shr(b) as i32,
@@ -659,7 +659,7 @@ impl ArmInstruction {
             _ => unreachable!(),
         }
     }
-    
+
     /// Calculates a shifted register operand and
     /// calculates the resulting carry flag.
     ///
@@ -677,13 +677,13 @@ impl ArmInstruction {
         // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
         if (self.raw & 0x0FF0) == 0 { return (a, false); }
-        
+
         // Decode RRX?
         if (self.raw & 0x0FF0) == 0x60 {
             let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
             return (bit31 | (((a as u32) >> 1) as i32), 0 != (a & 0b1));
         }
-        
+
         // A shift by Rs==0 just returns a without `a` new carry flag.
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
             ((self.raw >> 7) & 0b1_1111) as u32
@@ -693,9 +693,9 @@ impl ArmInstruction {
                 Err(y) => { return y; },
             }
         };
-        
+
         let carry_right = 0 != (a.wrapping_shr(b - 1) & 0b1);
-        
+
         match (self.raw >> 5) & 0b11 {
             0 => (a.wrapping_shl(b), 0 != (a.wrapping_shr(32 - b) & 0b1)),
             1 => ((a as u32).wrapping_shr(b) as i32, carry_right),
@@ -704,13 +704,13 @@ impl ArmInstruction {
             _ => unreachable!(),
         }
     }
-    
-    
+
+
     #[allow(non_snake_case)]
     fn decode_Rs_shift(&self, a: i32, regs: &[i32]) -> Result<u32, i32> {
         let r = (regs[self.Rs()] & 0xFF) as u32;
         if r == 0 { return Err(a); }
-        
+
         if r >= 32 {
             Err(match (self.raw >> 5) & 0b11 {
                 0 => 0,
@@ -722,12 +722,12 @@ impl ArmInstruction {
         }
         else { Ok(r) }
     }
-    
+
     #[allow(non_snake_case)]
     fn decode_Rs_shift_with_carry(&self, a: i32, regs: &[i32], carry: bool) -> Result<u32, (i32, bool)> {
         let r = (regs[self.Rs()] & 0xFF) as u32;
         if r == 0 { return Err((a, carry)); }
-        
+
         if r >= 32 {
             let bit31 = 0 != (a & (0x80000000_u32 as i32));
             Err(match (self.raw >> 5) & 0b11 {
@@ -743,12 +743,12 @@ impl ArmInstruction {
         }
         else { Ok(r) }
     }
-    
-    
+
+
     // Below here is just a bunch of
     // messy functions to display an
     // instruction disassembly on demand.
-    
+
     fn display_shift(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_shift_field_register() {
             try!(write!(f, "R{}", self.Rm()));
@@ -756,14 +756,14 @@ impl ArmInstruction {
         }
         else { write!(f, "#{}", self.rotated_immediate()) }
     }
-    
+
     fn display_offset(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Write the base register.
         try!(write!(f, "[R{}{}, ",
             self.Rn(),
             if self.is_pre_indexed() { "" } else { "]" }
         ));
-        
+
         // Write the offset.
         if self.is_offset_field_immediate() {
             let off: i32 = self.raw & 0x0FFF;
@@ -774,19 +774,19 @@ impl ArmInstruction {
             ));
             try!(self.display_shift_op(f));
         }
-        
+
         // Add bracket if pre-indexed.
         write!(f, "{}{}",
             if self.is_pre_indexed() { "]" } else { "" },
             if self.is_auto_incrementing() { "!" } else { "" }
         )
     }
-    
+
     fn display_shift_op(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Ignore LSL(0) and handle RRX.
         if (self.raw & 0x0FF0) == 0    { return Ok(()); }
         if (self.raw & 0x0FF0) == 0x60 { return write!(f, ", rrx"); }
-        
+
         // First write the shift opcode.
         try!(match (self.raw >> 5) & 0b11 {
             0 => write!(f, ", lsl "),
@@ -795,12 +795,12 @@ impl ArmInstruction {
             3 => write!(f, ", ror "),
             _ => unreachable!(),
         });
-        
+
         // Register or immediate?
         if (self.raw & (1 << 4)) == 0 { write!(f, "#{}", (self.raw >> 7) & 0b1_1111) }
         else                          { write!(f, "R{}", self.Rs()) }
     }
-    
+
     fn display_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{{"));
         for i in 0 .. 16 {
@@ -823,9 +823,9 @@ impl fmt::Display for ArmInstruction {
     /// - `Err` in case of an error.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{:#010X}\t", self.raw as u32));
-        
+
         let cond = self.condition();
-        
+
         match self.op {
             ArmOpcode::Unknown        => write!(f, "<unknown>"),
             ArmOpcode::SWI            => write!(f, "swi{}\t#{:#08X}", cond, self.comment()),
@@ -938,7 +938,7 @@ impl fmt::Display for ArmInstruction {
 #[cfg(test)]
 mod test {
     use std::fmt::Write;
-    
+
     pub const INSTRUCTIONS_RAW: &'static [i32] = &[
         // Use SWI to check condition decoding.
         0b0000_1111_011101110111011101110111_u32 as i32,
@@ -957,17 +957,17 @@ mod test {
         0b1101_1111_011101110111011101110111_u32 as i32,
         0b1110_1111_011101110111011101110111_u32 as i32,
         0b1111_1111_011101110111011101110111_u32 as i32,
-        
+
         // Test BX, B, BL.
         0b0000_000100101111111111110001_0111_u32 as i32,
         0b0000_101_0_111111111111111111111101_u32 as i32,
         0b0000_101_0_000000000000000000000001_u32 as i32,
         0b0000_101_1_111111111111111111111101_u32 as i32,
         0b0000_101_1_000000000000000000000001_u32 as i32,
-        
+
         // Test Unknown.
         0b0000_011_01100110011001100110_1_0110_u32 as i32,
-        
+
         // Data Processing.
         0b0000_00_1_0000_0_0001_0010_0011_01000101_u32 as i32,
         0b0000_00_0_0001_1_0001_0010_00111_00_0_0011_u32 as i32,
@@ -985,7 +985,7 @@ mod test {
         0b0000_00_0_1101_0_0001_0010_00000_00_0_0011_u32 as i32,
         0b0000_00_0_1110_0_0001_0010_00000_00_0_0011_u32 as i32,
         0b0000_00_0_1111_0_0001_0010_00000_00_0_0011_u32 as i32,
-        
+
         // MRS and MSR.
         0b0000_00010_0_001111_0001_000000000000_u32 as i32,
         0b0000_00010_1_001111_0001_000000000000_u32 as i32,
@@ -994,7 +994,7 @@ mod test {
         0b0000_00_0_10_1_1010001111_11111111_0111_u32 as i32,
         0b0000_00_1_10_0_1010001111_0010_00001111_u32 as i32,
     ];
-    
+
     pub const EXPECTED_DISASSEMBLY: &'static str = "\
         0x0F777777\tswieq\t#0x777777\n\
         0x1F777777\tswine\t#0x777777\n\
@@ -1041,18 +1041,18 @@ mod test {
         0x0168FFF7\tmsreq\tSPSR_flg, R7\n\
         0x0328F20F\tmsreq\tCPSR_flg, #0xF0000000\n\
     ";
-    
+
     #[test]
     pub fn instruction_disassembly() {
         let mut dis = String::new();
-        
+
         for inst in self::INSTRUCTIONS_RAW {
             writeln!(dis, "{}", super::ArmInstruction::decode(*inst).unwrap()).unwrap();
         }
-        
+
         println!("\n========================\nGenerated Disassembly:\n\n{}", dis);
         println!("\n========================\nExpected Disassembly:\n\n{}", self::EXPECTED_DISASSEMBLY);
-        
+
         assert!(dis == self::EXPECTED_DISASSEMBLY);
     }
 }

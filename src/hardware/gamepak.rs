@@ -2,7 +2,7 @@
 //! Implements the GamePak.
 //!
 //! A GamePak basically consists of two components:
-//! 
+//!
 //! - A ROM chip.
 //! - An SRAM chip.
 //! - Optionally additional features.
@@ -85,11 +85,11 @@ impl<'a> GamePakRomHeader<'a> {
             test = test.wrapping_sub(self.0.raw_bytes[i]);
         }
         test = test.wrapping_sub(0x19_u8);
-        
+
         // Compare result.
         test == self.0.raw_bytes[COMPLEMENT_CHECK_OFFSET]
     }
-    
+
     /// The currently loaded game's title.
     ///
     /// # Returns
@@ -99,7 +99,7 @@ impl<'a> GamePakRomHeader<'a> {
             slice::from_raw_parts(&(self.0.raw_bytes[GAME_TITLE_OFFSET]), self.0.loaded_rom_title_len)
         }).unwrap_or("????????????")
     }
-    
+
     /// The currently loaded game's game code.
     ///
     /// # Returns
@@ -109,7 +109,7 @@ impl<'a> GamePakRomHeader<'a> {
             slice::from_raw_parts(&(self.0.raw_bytes[GAME_CODE_OFFSET]), GAME_CODE_LEN)
         }).unwrap_or("????")
     }
-    
+
     /// The currently loaded game's maker code.
     ///
     /// # Returns
@@ -120,7 +120,7 @@ impl<'a> GamePakRomHeader<'a> {
             slice::from_raw_parts(&(self.0.raw_bytes[GAME_MAKER_CODE_OFFSET]), GAME_MAKER_CODE_LEN)
         }).unwrap_or("??")
     }
-    
+
     /// The currently loaded game's version number.
     ///
     /// # Returns
@@ -128,7 +128,7 @@ impl<'a> GamePakRomHeader<'a> {
     pub fn game_version(&self) -> u8 {
         self.0.raw_bytes[GAME_VERSION_NUMBER]
     }
-    
+
     /// The currently loaded ROM's size.
     ///
     /// # Returns
@@ -158,10 +158,10 @@ impl<'a> fmt::Display for GamePakRomHeader<'a> {
 pub struct GamePakRom {
     // Raw memory block. Nothing special here.
     raw_bytes: Box<[u8; MAX_GBA_ROM_SIZE]>,
-    
+
     // Size of the currently loaded ROM.
     loaded_rom_len: usize,
-    
+
     // Size of the loaded game's title.
     loaded_rom_title_len: usize,
 }
@@ -174,18 +174,18 @@ impl GamePakRom {
         GamePakRom {
             // Some ROMs use 0xFF as unused memory.
             raw_bytes: box [0x00_u8; MAX_GBA_ROM_SIZE],
-            
+
             loaded_rom_len: 0,
-            
+
             loaded_rom_title_len: 0,
         }
     }
-    
+
     /// Get a handle for the ROM's header.
     pub fn header<'a>(&'a self) -> GamePakRomHeader<'a> {
         GamePakRomHeader(self)
     }
-    
+
     /// Loads a ROM from a file.
     ///
     /// Only ROMs up to 32MiB in size are valid.
@@ -204,7 +204,7 @@ impl GamePakRom {
         // In case an error occurs and data is invalidated.
         self.loaded_rom_len = 0;
         self.loaded_rom_title_len = 0;
-        
+
         // Loads a binary ROM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading ROM file `{}`.", fp.display());
@@ -212,7 +212,7 @@ impl GamePakRom {
         let rbytes = try!(file.read(&mut *self.raw_bytes));
         for i in rbytes..MAX_GBA_ROM_SIZE { self.raw_bytes[i] = 0 };
         self.loaded_rom_len = rbytes;
-        
+
         // Decode the game's title's length without zero bytes.
         self.loaded_rom_title_len = GAME_TITLE_MAX_LEN;
         for i in 0..GAME_TITLE_MAX_LEN {
@@ -221,7 +221,7 @@ impl GamePakRom {
                 break;
             }
         }
-        
+
         // Done.
         Ok(())
     }
@@ -231,7 +231,7 @@ impl RawBytes for GamePakRom {
     fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] {
         &self.raw_bytes[(offs as usize)..]
     }
-    
+
     fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] {
         &mut self.raw_bytes[(offs as usize)..]
     }
@@ -250,7 +250,7 @@ impl GamePakSram {
     pub fn new() -> GamePakSram {
         GamePakSram(box [0; GAME_PAK_SRAM_LEN as usize])
     }
-    
+
     /// Clears the SRAM.
     pub fn clear(&mut self) {
         for i in 0..(GAME_PAK_SRAM_LEN as usize) { (*self.0)[i] = 0 };
@@ -261,7 +261,7 @@ impl RawBytes for GamePakSram {
     fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] {
         &(*self.0)[(offs as usize)..]
     }
-    
+
     fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] {
         &mut (*self.0)[(offs as usize)..]
     }
@@ -285,32 +285,32 @@ impl GamePak {
             sram: GamePakSram::new(),
         }
     }
-    
+
     /// Get the GamePak's ROM's header.
     pub fn header<'a>(&'a self) -> GamePakRomHeader<'a> {
         self.rom.header()
     }
-    
+
     /// Get the GamePak's ROM.
     pub fn rom<'a>(&'a self) -> &'a GamePakRom {
         &self.rom
     }
-    
+
     /// Get the GamePak's ROM.
     pub fn rom_mut<'a>(&'a mut self) -> &'a mut GamePakRom {
         &mut self.rom
     }
-    
+
     /// Get the GamePak's SRAM.
     pub fn sram<'a>(&'a self) -> &'a GamePakSram {
         &self.sram
     }
-    
+
     /// Get the GamePak's SRAM.
     pub fn sram_mut<'a>(&'a mut self) -> &'a mut GamePakSram {
         &mut self.sram
     }
-    
+
     /// Loads a ROM from a file.
     ///
     /// Only ROMs up to 32MiB in size are valid.

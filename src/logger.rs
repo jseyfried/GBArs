@@ -25,7 +25,7 @@ impl Log for ConsoleFileLogger {
         let min_level = if self.verbose { LogLevel::Trace } else { LogLevel::Info };
         metadata.level() <= min_level
     }
-    
+
     #[cfg_attr(feature="clippy", allow(print_stdout))]
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
@@ -35,17 +35,17 @@ impl Log for ConsoleFileLogger {
             let loc = record.location();
             let loc = format!("[{}:{} - {}]", loc.file(), loc.line(), loc.module_path());
             let fmt = format!("{}", record.args()).replace("\n","\n\t\t   ");
-            
+
             // Build a common log message for both targets.
             let mut msg = format!("[TID={}]\t{}\t{}\n\t\t-- {}\n", tid, record.level(), loc, fmt);
-            
+
             // Log to file.
             if let Some(f) = self.file.as_ref() {
                 let tmp = f.lock().unwrap();
                 writeln!(*(tmp.borrow_mut()), "{}", msg).unwrap();
             }
             else { msg.push_str("\n\x1B[31m\x1B[1mNo log file!\x1B[0m"); }
-            
+
             // Log to stdout.
             if !self.colour { println!("{}", msg); }
             else {

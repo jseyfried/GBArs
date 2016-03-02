@@ -13,7 +13,7 @@ use std::mem;
 pub enum State {
     /// Currently executing 32-bit ARM instructions.
     ARM = 0,
-    
+
     /// Currently executing 16-bit THUMB instructions.
     THUMB,
 }
@@ -78,7 +78,7 @@ impl Exception {
             Exception::FastInterrupt        => 3,
         }
     }
-    
+
     /// Get the exception's CPU mode on entry.
     pub fn mode_on_entry(self) -> Mode {
         match self {
@@ -92,7 +92,7 @@ impl Exception {
             Exception::FastInterrupt        => Mode::FIQ,
         }
     }
-    
+
     /// Check whether fast interrupts should be disabled.
     ///
     /// # Returns
@@ -102,7 +102,7 @@ impl Exception {
     pub fn disable_fiq_on_entry(self) -> bool {
         (self == Exception::Reset) | (self == Exception::FastInterrupt)
     }
-    
+
     /// Get the exception vector address.
     ///
     /// # Returns
@@ -123,75 +123,75 @@ impl CPSR {
     /// Used to mask reserved bits away.
     pub const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
     //                                   NZCV                       IFTMMMMM
-    
+
     /// Sign flag bit.
     ///
     /// 1 if signed, otherwise 0.
     pub const SIGN_FLAG_BIT: u8 = 31;
-    
+
     /// Zero flag bit.
     ///
     /// 1 if zero, otherwise 0.
     pub const ZERO_FLAG_BIT: u8 = 30;
-    
+
     /// Carry flag bit.
     ///
     /// 1 if carry or no borrow, 0 if borrow or no carry.
     pub const CARRY_FLAG_BIT: u8 = 29;
-    
+
     /// Overflow flag bit.
     ///
     /// 1 if overflow, otherwise 0.
     pub const OVERFLOW_FLAG_BIT: u8 = 28;
-    
+
     /// IRQ disable bit.
     ///
     /// 1 if disabled, otherwise 0.
     pub const IRQ_DISABLE_BIT: u8 = 7;
-    
+
     /// FIQ disable bit.
     ///
     /// 1 if disabled, otherwise 0.
     pub const FIQ_DISABLE_BIT: u8 = 6;
-    
+
     /// State bit.
     ///
     /// 1 if THUMB, 0 if ARM.
     pub const STATE_BIT: u8 = 5;
-    
+
     /// Mode bits mask.
     ///
     /// Used to get the mode bits only.
     pub const MODE_MASK: u32 = 0b0001_1111;
-    
+
     /// Bit pattern for user mode.
     pub const MODE_USER: u32 = 0b1_0000;
-    
+
     /// Bit pattern for FIQ mode.
     pub const MODE_FIQ: u32 = 0b1_0001;
-    
+
     /// Bit pattern for IRQ mode.
     pub const MODE_IRQ: u32 = 0b1_0010;
-    
+
     /// Bit pattern for supervisor mode.
     pub const MODE_SUPERVISOR: u32 = 0b1_0011;
-    
+
     /// Bit pattern for abort mode.
     pub const MODE_ABORT: u32 = 0b1_0111;
-    
+
     /// Bit pattern for undefined mode.
     pub const MODE_UNDEFINED: u32 = 0b1_1011;
-    
+
     /// Bit pattern for system mode.
     pub const MODE_SYSTEM: u32 = 0b1_1111;
-    
-    
+
+
     /// Clears all reserved bits.
     #[inline(always)]
     pub fn clear_reserved_bits(&mut self) {
         self.0 &= CPSR::NON_RESERVED_MASK;
     }
-    
+
     /// Get the condition bits.
     ///
     /// # Returns
@@ -204,13 +204,13 @@ impl CPSR {
     pub fn condition_bits(&self) -> u32 {
         (self.0 as u32) >> CPSR::OVERFLOW_FLAG_BIT
     }
-    
+
     /// Converts the state bit to a state enum.
     #[inline(always)]
     pub fn state(&self) -> State {
         unsafe { mem::transmute(((self.0 >> CPSR::STATE_BIT) & 1) as u8) }
     }
-    
+
     /// Converts the mode bit pattern to a mode enum.
     pub fn mode(&self) -> Mode {
         match self.0 & CPSR::MODE_MASK {
@@ -227,7 +227,7 @@ impl CPSR {
             },
         }
     }
-    
+
     /// Sets or clears the state bit
     /// depending on the new state.
     #[inline(always)]
@@ -235,7 +235,7 @@ impl CPSR {
         self.0 &= !(1 << CPSR::STATE_BIT);
         self.0 |= (s as u8 as u32) << CPSR::STATE_BIT;
     }
-    
+
     /// Sets or clears the mode bits
     /// depending on the new mode.
     #[inline(always)]
@@ -243,49 +243,49 @@ impl CPSR {
         self.0 &= !CPSR::MODE_MASK;
         self.0 |= m.as_bits();
     }
-    
+
     /// Sets the IRQ disable bit.
     #[inline(always)]
     pub fn disable_irq(&mut self) {
         self.0 |= 1 << CPSR::IRQ_DISABLE_BIT;
     }
-    
+
     /// Sets the FIQ disable bit.
     #[inline(always)]
     pub fn disable_fiq(&mut self) {
         self.0 |= 1 << CPSR::FIQ_DISABLE_BIT;
     }
-    
+
     /// Clears the IRQ disable bit.
     #[inline(always)]
     pub fn enable_irq(&mut self) {
         self.0 &= !(1 << CPSR::IRQ_DISABLE_BIT);
     }
-    
+
     /// Clears the FIQ disable bit.
     #[inline(always)]
     pub fn enable_fiq(&mut self) {
         self.0 &= !(1 << CPSR::FIQ_DISABLE_BIT);
     }
-    
+
     /// Gets the current state of the N bit.
     #[allow(non_snake_case)]
     pub fn N(self) -> bool {
         0 != (self.0 & (1 << 31))
     }
-    
+
     /// Gets the current state of the Z bit.
     #[allow(non_snake_case)]
     pub fn Z(self) -> bool {
         0 != (self.0 & (1 << 30))
     }
-    
+
     /// Gets the current state of the C bit.
     #[allow(non_snake_case)]
     pub fn C(self) -> bool {
         0 != (self.0 & (1 << 29))
     }
-    
+
     /// Gets the current state of the V bit.
     #[allow(non_snake_case)]
     pub fn V(self) -> bool {
@@ -300,16 +300,16 @@ pub struct Arm7Tdmi {
     gpr: [i32; 16],
     cpsr: CPSR,
     spsr: [u32; 7],
-    
+
     // Extra details.
     nn: i32,
-    
+
     // Register backups for mode changes.
     gpr_r8_r12_fiq: [i32; 5],
     gpr_r8_r12_other: [i32; 5],
     gpr_r13_all: [i32; 7],
     gpr_r14_all: [i32; 7],
-    
+
     // Settings.
     mode: Mode,
     state: State,
@@ -322,42 +322,42 @@ impl Arm7Tdmi {
     ///
     /// May be used as GPR in ARM state.
     pub const SP: usize = 13;
-    
+
     /// Register index for the link register.
     ///
     /// This register usually holds the returns address
     /// of a running function. In ARM state, this might
     /// be used as GPR.
     pub const LR: usize = 14;
-    
+
     /// Register index for the program counter.
     ///
     /// When reading PC, this will usually return an
     /// address beyond the read instruction's address,
     /// due to pipelining and other things.
     pub const PC: usize = 15;
-    
+
     /// Creates a new CPU where all registers are zeroed.
     pub fn new() -> Arm7Tdmi {
         Arm7Tdmi {
             gpr: [0; 16],
             cpsr: CPSR(0),
             spsr: [0; 7],
-            
+
             nn: 0,
-            
+
             gpr_r8_r12_fiq: [0; 5],
             gpr_r8_r12_other: [0; 5],
             gpr_r13_all: [0; 7],
             gpr_r14_all: [0; 7],
-            
+
             mode: Mode::System,
             state: State::ARM,
             irq_disable: false,
             fiq_disable: false,
         }
     }
-    
+
     /// Resets the CPU.
     ///
     /// The CPU starts up by setting few
@@ -365,25 +365,25 @@ impl Arm7Tdmi {
     /// reset exception.
     pub fn reset(&mut self) {
         self.gpr[Arm7Tdmi::PC] = 0;
-        
+
         self.cpsr = CPSR(
             (CPSR::MODE_SUPERVISOR)
           | (1 << CPSR::IRQ_DISABLE_BIT)
           | (1 << CPSR::FIQ_DISABLE_BIT)
         );
-        
+
         self.mode = Mode::Supervisor;
         self.state = State::ARM;
         self.irq_disable = true;
         self.fiq_disable = true;
     }
-    
+
     /// Causes an exception, switching execution modes and states.
     pub fn exception(&mut self, ex: Exception) {
         let new_mode = ex.mode_on_entry();
         let cmi = self.mode as u8 as usize;
         let nmi =  new_mode as u8 as usize;
-        
+
         // Save banked registers R13, R14, SPSR.
         let ret_addr = self.gpr[Arm7Tdmi::PC] + self.nn;
         self.gpr_r14_all[cmi] = self.gpr[14];
@@ -392,7 +392,7 @@ impl Arm7Tdmi {
         self.gpr_r13_all[cmi] = self.gpr[13];
         self.gpr[13] = self.gpr_r13_all[nmi];
         self.spsr[nmi] = self.cpsr.0;
-        
+
         // Now the banked registers R8..R12.
         if (new_mode == Mode::FIQ) ^ (self.mode == Mode::FIQ) {
             if new_mode == Mode::FIQ {
@@ -404,7 +404,7 @@ impl Arm7Tdmi {
                 for i in 0..5 { self.gpr[i+8] = self.gpr_r8_r12_other[i]; }
             }
         }
-        
+
         // Apply new state.
         self.cpsr.set_mode(new_mode);
         self.cpsr.set_state(State::ARM);
