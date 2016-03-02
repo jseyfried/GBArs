@@ -1012,6 +1012,7 @@ mod test {
 
         // Test LDR and STR.
         0b0000_01_0_0_0_0_0_0_0001_0010_011101110111_u32 as i32,
+        0b0000_01_0_0_0_0_0_1_0001_0010_011101110111_u32 as i32,
     ];
 
     pub const EXPECTED_DISASSEMBLY: &'static str = "\
@@ -1072,6 +1073,7 @@ mod test {
         0x00E12394\tsmlaleq\tR2, R1, R4, R3\n\
         0x00F12394\tsmlalseq\tR2, R1, R4, R3\n\
         0x04012777\tstreq\tR2, [R1], #-1911\n\
+        0x04112777\t\n\0        0b0000_01_0_0_0_0_0_1_0001_0010_011101110111
     ";
 
     #[test]
