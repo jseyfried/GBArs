@@ -48,7 +48,7 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
     > A hackable text editor
 
-    This is quite a decent source code editor and it's what I'm currently using to develop GBArs. For this project here it at least recommend using these packages:
+    This is quite a decent source code editor and it's what I'm currently using to develop GBArs. For this project here I at least recommend using these packages:
 
     - `editorconfig` for tab settings and what not.
     - `language-rust` for Rust language support.
