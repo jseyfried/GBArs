@@ -29,59 +29,68 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**
-	
+
 	> a free hex editor / disk editor for Linux, Windows and MacOSX
-	
+
 	So far my favourite hex editor. It is obviously a GUI application based on [wxWidgets](http://www.wxwidgets.org/).
 - **[MSYS2](https://sourceforge.net/p/msys2/wiki/MSYS2%20installation/)**
-	
+
 	> A Cygwin-derived software distro for Windows using Arch Linux's Pacman
-	
+
 	If you work on a Windows machine but find yourself wanting to use Bash, binutils, and other Linux tools, then this might be just what you needed.
 - **[Notepad++ Rust Syntax](https://github.com/pfalabella/Rust-notepadplusplus)**
-	
+
 	> Notepad++ syntax highlighting for Rust.
-	
+
 	There are some missing highlights like the keyword `crate`, but these are easily added by hand.
-	
+
+- **[ATOM](https://atom.io/)**
+
+    > A hackable text editor
+
+    This is quite a decent source code editor and it's what I'm currently using to develop GBArs. For this project here it at least recommend using these packages:
+
+    - `editorconfig` for tab settings and what not.
+    - `language-rust` for Rust language support.
+    - `linter-rust` for showing warnings etc. in the status bar.
 - **[Online Disassembler](https://onlinedisassembler.com/odaweb/)**
-	
+
 	> Disassembly in the cloud.
-	
+
 	As the name states: A website disassembling your binaries. Just copy and paste sections of your ROM files and have fun. Note that the GBA works in Little Endian mode.
 
 - **[ARM7TDMI Instruction Set Reference](http://morrow.ece.wisc.edu/ECE353/arm7tdmi_instruction_set_reference.pdf)**
-	
+
 	> Department of Electrical and Computer Engineering University of Wisconsin-Madison
-	
+
 	Thanks to those guys, here is an instruction set reference manual for the ARM7TDMI, which is the very CPU used in the GBA.
 
 
 # References
 - **[ProblemKaputt.de - GBATEK](http://problemkaputt.de/gbatek.htm)**
-	
+
 	> GBATEK written 2001-2014 by Martin Korth, programming specs for the GBA and NDS hardware
-	
+
 	A pretty detailed one-page with almost all the information you need.
 - **[GBADEV.org](http://www.gbadev.org/docs.php)**
-	
+
 	> It started as a website aiming to share development information about the then unreleased GBA system. Here we are, 16 years later, doing the same thing. Who would have thought?
-	
+
 	The first GBA reference site I stumbled upon.
 - **[Rust Programming Language](https://www.rust-lang.org/)**
-	
+
 	> Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
-	
+
 	This language is just beautiful. Try it! Use it! It even provides an online book and other useful resources to learn and master this language. And if you use DuckDuckGo as a search engine, you can browse the standard library documentation using `!rust` for Rust stable or `!rustn` for Rust nightly.
 - **[Cargo Package Manager](https://crates.io/)**
-	
+
 	> The Rust community’s crate host
-	
+
 	Rust's package manager. Here you can find almost all Rust packages, called "crates".
 - **[Rustendo64](https://github.com/yupferris/rustendo64)**
-	
+
 	> Livecoding a Nintendo 64 emulator in Rust :D
-	
+
 	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams.
 
 # License
