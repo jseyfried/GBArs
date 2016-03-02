@@ -19,6 +19,9 @@ pub mod gamepak;
 pub mod error;
 
 
+/// This is the actual GBA emulator. It handles all the virtual hardware,
+/// loads and saves ROMs and SRAMs, executes the CPU instructions, and
+/// what not.
 pub struct Gba {
     //
     cpu: Arm7Tdmi,
@@ -31,7 +34,7 @@ pub struct Gba {
 }
 
 impl Gba {
-    //
+    /// Creates a new GBA emulator instance.
     pub fn new() -> Gba {
         Gba {
             cpu: Arm7Tdmi::new(),
