@@ -295,13 +295,17 @@ impl ArmInstruction {
     /// A signed offset that should be added to any given
     /// base address.
     pub fn shifted_offset(&self, regs: &[i32], carry: bool) -> i32 {
-        let offs = if self.is_offset_field_immediate() {
-            self.raw & 0x0FFF
-        } else {
-            self.calculate_shifted_register(regs, carry)
-        };
+        if self.is_offset_field_immediate() { self.offset12() }
+        else {
+            let offs = self.calculate_shifted_register(regs, carry);
+            if self.is_offset_added() { offs } else { -offs }
+        }
+    }
 
-        if self.is_offset_added() { offs } else { -offs }
+    /// Gets a zero-extended 12-bit immediate to be used with LDR/STR.
+    pub fn offset12(&self) -> i32 {
+        let off = (self.raw & 0xFFF) as i32;
+        if self.is_offset_added() { off } else { -off }
     }
 
     /// Gets a zero-extended 8-bit immediate to be used with LDC/STC.
@@ -618,58 +622,6 @@ impl ArmInstruction {
             self.display_shift_op(f)
         }
         else { write!(f, "#{}", self.rotated_immediate()) }
-    }
-
-    fn display_offset(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write the base register.
-        try!(write!(f, "[R{}{}, ",
-            self.Rn(),
-            if self.is_pre_indexed() { "" } else { "]" }
-        ));
-
-        // Write the offset.
-        if self.is_offset_field_immediate() {
-            let off: i32 = self.raw & 0x0FFF;
-            try!(write!(f, "#{}", if self.is_offset_added() { off } else { -off }));
-        } else {
-            try!(write!(f, "{}R{}",
-                if self.is_offset_added() { "+" } else { "-" }, self.Rm(),
-            ));
-            try!(self.display_shift_op(f));
-        }
-
-        // Add bracket if pre-indexed.
-        write!(f, "{}{}",
-            if self.is_pre_indexed() { "]" } else { "" },
-            if self.is_auto_incrementing() & !self.is_pre_indexed() { "!" } else { "" }
-        )
-    }
-
-    fn display_shift_op(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Ignore LSL(0) and handle RRX.
-        if (self.raw & 0x0FF0) == 0    { return Ok(()); }
-        if (self.raw & 0x0FF0) == 0x60 { return write!(f, ", rrx"); }
-
-        // First write the shift opcode.
-        try!(match (self.raw >> 5) & 0b11 {
-            0 => write!(f, ", lsl "),
-            1 => write!(f, ", lsr "),
-            2 => write!(f, ", asr "),
-            3 => write!(f, ", ror "),
-            _ => unreachable!(),
-        });
-
-        // Register or immediate?
-        if (self.raw & (1 << 4)) == 0 { write!(f, "#{}", (self.raw >> 7) & 0b1_1111) }
-        else                          { write!(f, "R{}", self.Rs()) }
-    }
-
-    fn display_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{{"));
-        for i in 0 .. 16 {
-            if (self.raw & (1 << i)) != 0 { try!(write!(f, "R{}, ", i)); }
-        }
-        write!(f, "}}{}", if self.is_enforcing_user_mode() { "^" } else { "" })
     }
 }
 

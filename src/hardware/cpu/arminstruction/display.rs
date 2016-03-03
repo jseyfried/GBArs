@@ -30,6 +30,9 @@ impl fmt::Display for ArmInstruction {
             ArmOpcode::SWP           => self.fmt_swp(f),
             ArmOpcode::CDP           => self.fmt_cdp(f),
             ArmOpcode::MRC_MCR       => self.fmt_mrc_mcr(f),
+            ArmOpcode::LDC_STC       => self.fmt_ldc_src(f),
+            ArmOpcode::LDM_STM       => self.fmt_ldm_stm(f),
+            ArmOpcode::LDR_STR       => self.fmt_ldr_str(f),
             _ => unimplemented!();
         }
     }
@@ -72,25 +75,6 @@ impl fmt::Display for ArmInstruction {
                 if self.is_pre_indexed() { "]" } else { "" },
                 if self.is_auto_incrementing() { "!" } else { "" }
             ),
-            ArmOpcode::LDR_STR => {
-                try!(write!(f, "{}{}{}{}\tR{}, ",
-                    if self.is_load() { "ldr" } else { "str" },
-                    if self.is_transfering_bytes() { "b" } else { "" }, cond,
-                    if !self.is_pre_indexed() & self.is_auto_incrementing() { "t" } else { "" },
-                    self.Rd()
-                ));
-                self.display_offset(f)
-            },
-            ArmOpcode::LDM_STM => {
-                try!(write!(f, "{}{}{}{}\tR{}{}, ",
-                    if self.is_load() { "ldm" } else { "stm" },
-                    if self.is_offset_added() { "i" } else { "d" },
-                    if self.is_pre_indexed()  { "b" } else { "a" },
-                    cond, self.Rn(),
-                    if self.is_auto_incrementing() { "!" } else { "" }
-                ));
-                self.display_register_list(f)
-            },
             ArmOpcode::MUL_MLA => {
                 try!(write!(f, "{}{}{}\tR{}, R{}, R{}",
                     if self.is_accumulating() { "mla" } else { "mul" },
@@ -115,15 +99,6 @@ impl fmt::Display for ArmInstruction {
                 if !op.is_move() { try!(write!(f, "R{}, ", self.Rn())); }
                 self.display_shift(f)
             },
-            ArmOpcode::LDC_STC => write!(f, "{}{}{}\tP{}, C{}, [R{}{}, #{}{}{}",
-                if self.is_load() { "ldc" } else { "stc" },
-                if self.is_register_block_transfer() { "l" } else { "" },
-                cond, self.Rs(), self.Rd(), self.Rn(),
-                if self.is_pre_indexed() { "" } else { "]" },
-                self.offset8(),
-                if self.is_pre_indexed() { "]" } else { "" },
-                if self.is_auto_incrementing() { "!" } else { "" }
-            ),
         }
     }
 }
@@ -165,9 +140,54 @@ impl ArmInstruction {
 
     // Formatting utility functions below.
 
-    fn fmt_msr_shift_field(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_shifted_Rm(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}", self.Rm_name()));
+
+        // Ignore LSL(0) and handle RRX.
+        if (self.raw & 0x0FF0) == 0    { return Ok(()); }
+        if (self.raw & 0x0FF0) == 0x60 { return write!(f, ", rrx"); }
+
+        // First write the shift opcode.
+        try!(match (self.raw >> 5) & 0b11 {
+            0 => write!(f, ", lsl "),
+            1 => write!(f, ", lsr "),
+            2 => write!(f, ", asr "),
+            3 => write!(f, ", ror "),
+            _ => unreachable!(),
+        });
+
+        // Register or immediate?
+        if (self.raw & (1 << 4)) == 0 { write!(f, "#{}", (self.raw >> 7) & 0b1_1111) }
+        else                          { write!(f,  "{}", self.Rs_name()) }
+    }
+
+    fn fmt_shsr_field(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_shift_field_register() { write!(f, "{}", self.Rm_name()) }
         else { write!(f, "#{:#010X}", self.rotated_immediate() as u32) }
+    }
+
+    fn fmt_offs_field(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "[{}{}, ", self.Rn_name(), if self.is_pre_indexed() { "" } else { "]" }));
+
+        if self.is_offset_field_immediate() {
+            try!(write!(f, "#{}", self.offset12()));
+        } else {
+            try!(write!(f, "{}", if self.is_offset_added() { "+" } else { "-" }));
+            try!(self.fmt_shifted_Rm(f));
+        }
+
+        write!(f, "{}{}",
+            if self.is_pre_indexed() { "]" } else { "" },
+            if self.is_auto_incrementing() & !self.is_pre_indexed() { "!" } else { "" }
+        )
+    }
+
+    fn fmt_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{{"));
+        for i in 0 .. 16 {
+            if (self.raw & (1 << i)) != 0 { try!(write!(f, "{}, ", self.register_name(i))); }
+        }
+        write!(f, "}}{}", if self.is_enforcing_user_mode() { "^" } else { "" })
     }
 
     fn fmt_swi(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -196,7 +216,7 @@ impl ArmInstruction {
 
     fn fmt_msr_immediate(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "msr{}\t{}_flg, ", self.condition_name(), self.psr_name()));
-        self.fmt_msr_shift_field(f)
+        self.fmt_shsr_field(f)
     }
 
     fn fmt_swp(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -224,6 +244,39 @@ impl ArmInstruction {
             Rd = self.Rd_name(), cn = self.Rn(), cm = self.Rm(),
             info = self.cp_info()
         )
+    }
+
+    fn fmt_ldc_stc(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{inst}{blk}{cond}\tP{cpid}, CR{cd}, [{Rn}{br_post}, #{off}{br_pre}{inc}",
+            inst = if self.is_load() { "ldc" } else { "stc" },
+            blk  = if self.is_register_block_transfer() { "l" } else { "" },
+            cond = self.condition_name(), cpid = self.cp_id(),
+            cd = self.Rd(), Rn = self.Rn_name(), off = self.offset8(),
+            br_post = if self.is_pre_indexed() { "" } else { "]" },
+            br_pre  = if self.is_pre_indexed() { "]" } else { "" },
+            inc = if self.is_auto_incrementing() { "!" } else { "" }
+        )
+    }
+
+    fn fmt_ldm_stm(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{inst}{inc_dec}{pre}{cond}\t{Rn}{auto}, ",
+            inst    = if self.is_load() { "ldm" } else { "stm" },
+            inc_dec = if self.is_offset_added() { 'i' } else { 'd' },
+            pre     = if self.is_pre_indexed()  { 'b' } else { 'a' },
+            cond    = self.condition_name(), Rn = self.Rn_name(),
+            auto    = if self.is_auto_incrementing() { "!" } else { "" }
+        ));
+        self.fmt_register_list(f)
+    }
+
+    fn fmt_ldr_str(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{inst}{bytes}{t}{cond}\t{Rd}, ",
+            inst  = if self.is_load() { "ldr" } else { "str" },
+            bytes = if self.is_transfering_bytes() { "b" } else { "" },
+            t     = if !self.is_pre_indexed() & self.is_auto_incrementing() { "t" } else { "" },
+            cond  = self.condition_name(), Rd = self.Rd_name()
+        ));
+        self.fmt_offs_field(f)
     }
 }
 
