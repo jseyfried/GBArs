@@ -5,33 +5,6 @@
 //! These tables show how ARM state instructions are encoded:
 //!
 //! ```text
-//! Instruction Flags:
-//!     .... ....  .... ....  .... ....  .... ....
-//!     COND                                  RegM | BX #map: RegN => RegM
-//!     COND    F  imm_ imm_  imm_ imm_  imm_ imm_ | B/BL
-//!     COND         AS RegN  RegD RegS       RegM | MUL/MLA #map: RegN <=> RegD
-//!     COND        UAS RegN  RegD RegS       RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
-//!     COND        P         RegD                 | MRS
-//!     COND        P                         RegM | MSR by RegM
-//!     COND   I    P              shft  shft shft | MSR by Immediate...
-//!            0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
-//!            0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
-//!            1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
-//!     COND   Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op4(xxxx)...
-//!            0                   _imm  _op0 RegM | ... RegM = RegM SHIFT(op) _imm_
-//!            0                   RegS  0op1 RegM | ... RegM = RegM SHIFT(op) RegS
-//!            1                   xxxx  imm_ imm_ | ... Immediate = imm_imm_ ROR 2*xxxx
-//!     COND   I+  -BWL RegN  RegD offs  offs offs | LDR/STR
-//!     COND    +  - WL RegN  RegD        xx  RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
-//!     COND    +  - WL RegN  RegD imm_   xx  imm_ | LDRH/STRH/LDRSB/LDRSH depending on Op(xx) with Offset=imm_imm_
-//!     COND    +  -RWL RegN  regs regs  regs regs | LDM/STM with register list regsregsregsregs
-//!     COND        B   RegN  RegD            RegM | SWP
-//!     COND       imm_ imm_  imm_ imm_  imm_ imm_ | SWI with comment
-//!     COND       CPOP RegN  RegD CPID  xxx  RegM | CDP with CoCPU Op4(CPOP) and CP Info xxx
-//!     COND       yyyL CprN  RegD CPID  xxx  CprM | MRC/MCR with CoCPU Op3(yyy) and CP Info xxx
-//!     COND 110+  -NWL RegN  CprD CPID  imm_ imm_ | LDC/STC with unsigned Immediate
-//!     COND    ?  ???? ????  ???? ????  ???  ???? | Unknown Instruction
-//!
 //! Full Instructions:
 //!     .... ....  .... ....  .... ....  .... ....
 //!     COND 0001  0010 1111  1111 1111  0001 RegM | BX #map: RegN => RegM
@@ -40,7 +13,7 @@
 //!     COND 0000  1UAS RegN  RegD RegS  1001 RegM | MULL/MLAL #map: RdHi => RegN, RdLo => RegD
 //!     COND 0001  0P00 1111  RegD 0000  0000 0000 | MRS
 //!     COND 0001  0P10 1001  1111 0000  0000 RegM | MSR by RegM
-//!     COND 00I1  0P10 1000  1111 shft  shft shft | MSR by imm
+//!     COND 00I1  0P10 1000  1111 shsr  shsr shsr | MSR into flags
 //!     COND 00Ix  xxxS RegN  RegD shft  shft shft | Data Processing Op(xxxx)
 //!     COND 01I+  -BWL RegN  RegD offs  offs offs | LDR/STR
 //!     COND 000+  -0WL RegN  RegD 0000  1xx1 RegM | LDRH/STRH/LDRSB/LDRSH depending on Op(xx)
@@ -76,6 +49,13 @@
 //!     I=1: shft shft shft
 //!          xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
 //!
+//! MSR shift format:
+//!     I=0: shsr shsr shsr
+//!          0000 0000 RegM // RegM = RegM
+//!
+//!     I=1: shsr shsr shsr
+//!          xxxx imm_ imm_ // Immediate = imm_imm_ ROR 2*xxxx
+//!
 //! Offset format:
 //!     I=0: offs offs offs
 //!          imm_ imm_ imm_ // Immediate unsigned offset.
@@ -97,88 +77,19 @@
 #![warn(missing_docs)]
 
 use std::mem;
-use std::fmt;
 
 use super::super::error::GbaError;
-use super::arm7tdmi::CPSR;
+use super::armcondition::ArmCondition;
+use std::fmt;
 
+pub use self::armdpop::*;
+pub use self::display::*;
 
-/// The condition field of an ARM instruction.
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[repr(u8)]
-pub enum ArmCondition {
-    #[doc = "Z set. EQual."]                                       EQ = 0b0000,
-    #[doc = "Z clear. Not Equal."]                                 NE = 0b0001,
-    #[doc = "C set. Unsigned Higher or Same."]                     HS = 0b0010,
-    #[doc = "C clear. Unsigned LOwer."]                            LO = 0b0011,
-    #[doc = "N set. MInus, i.e. negative."]                        MI = 0b0100,
-    #[doc = "N clear. PLus, i.e. positive or zero."]               PL = 0b0101,
-    #[doc = "V Set. Overflow."]                                    VS = 0b0110,
-    #[doc = "V Clear. No Overflow."]                               VC = 0b0111,
-    #[doc = "C set and Z clear. Unsigned HIgher."]                 HI = 0b1000,
-    #[doc = "C clear or Z set. Unsigned Lower or Same."]           LS = 0b1001,
-    #[doc = "N equals V. Greater than or Equal to."]               GE = 0b1010,
-    #[doc = "N distinct from V. Less Than."]                       LT = 0b1011,
-    #[doc = "Z clear and N equals V. Greater Than."]               GT = 0b1100,
-    #[doc = "Z set or N distinct from V.  Less than or Equal to."] LE = 0b1101,
-    #[doc = "ALways execute this instruction, i.e. no condition."] AL = 0b1110,
-    #[doc = "Reserved."]                                           NV = 0b1111,
-}
+mod armdpop;
+mod display;
 
-impl ArmCondition {
-    /// Evaluates the condition field depending on the CPSR's state.
-    ///
-    /// # Params
-    /// - `cpsr`: The CPSR to inspect.
-    ///
-    /// # Returns
-    /// - `Ok`: `true` if the corresponding instruction should be executed, otherwise `false`.
-    /// - `Err`: The condition field is `NV`, which is reserved in ARM7TDMI.
-    pub fn check(self, cpsr: &CPSR) -> Result<bool, GbaError> {
-        match self {
-            ArmCondition::EQ => Ok( cpsr.Z() ),
-            ArmCondition::NE => Ok(!cpsr.Z() ),
-            ArmCondition::HS => Ok( cpsr.C() ),
-            ArmCondition::LO => Ok(!cpsr.C() ),
-            ArmCondition::MI => Ok( cpsr.N() ),
-            ArmCondition::PL => Ok(!cpsr.N() ),
-            ArmCondition::VS => Ok( cpsr.V() ),
-            ArmCondition::VC => Ok(!cpsr.V() ),
-            ArmCondition::HI => Ok( cpsr.C() & !cpsr.Z() ),
-            ArmCondition::LS => Ok(!cpsr.C() |  cpsr.Z() ),
-            ArmCondition::GE => Ok( cpsr.N() == cpsr.V() ),
-            ArmCondition::LT => Ok( cpsr.N() != cpsr.V() ),
-            ArmCondition::GT => Ok(!cpsr.Z() & (cpsr.N() == cpsr.V()) ),
-            ArmCondition::LE => Ok( cpsr.Z() | (cpsr.N() != cpsr.V()) ),
-            ArmCondition::AL => Ok( true ),
-            ArmCondition::NV => Err(GbaError::ReservedArmConditionNV),
-        }
-    }
-}
-
-impl fmt::Display for ArmCondition {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ArmCondition::EQ => write!(f, "eq"),
-            ArmCondition::NE => write!(f, "ne"),
-            ArmCondition::HS => write!(f, "hs"),
-            ArmCondition::LO => write!(f, "lo"),
-            ArmCondition::MI => write!(f, "mi"),
-            ArmCondition::PL => write!(f, "pl"),
-            ArmCondition::VS => write!(f, "vs"),
-            ArmCondition::VC => write!(f, "vc"),
-            ArmCondition::HI => write!(f, "hi"),
-            ArmCondition::LS => write!(f, "ls"),
-            ArmCondition::GE => write!(f, "ge"),
-            ArmCondition::LT => write!(f, "lt"),
-            ArmCondition::GT => write!(f, "gt"),
-            ArmCondition::LE => write!(f, "le"),
-            ArmCondition::AL => write!(f,   ""), // No special name here!
-            ArmCondition::NV => write!(f, "nv"),
-        }
-    }
-}
-
+#[cfg(test)]
+mod test;
 
 /// A decoded ARM opcode.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -203,73 +114,6 @@ pub enum ArmOpcode {
     #[doc = "Load/store co-processor from/to memory"] LDC_STC,
     #[doc = "Unknown instruction"]                    Unknown,
 }
-
-
-/// A data processing opcode.
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[repr(u8)]
-pub enum ArmDPOP {
-    #[doc = "Bitwise AND"]                  AND = 0b0000,
-    #[doc = "Bitwise XOR"]                  EOR = 0b0001,
-    #[doc = "Subtraction"]                  SUB = 0b0010,
-    #[doc = "Reverse subtraction"]          RSB = 0b0011,
-    #[doc = "Addition"]                     ADD = 0b0100,
-    #[doc = "Add with carry"]               ADC = 0b0101,
-    #[doc = "Subtract with borrow"]         SBC = 0b0110,
-    #[doc = "Reverse subtract with borrow"] RSC = 0b0111,
-    #[doc = "Test bits"]                    TST = 0b1000,
-    #[doc = "Test bitwise equality"]        TEQ = 0b1001,
-    #[doc = "Compare"]                      CMP = 0b1010,
-    #[doc = "Compare negative"]             CMN = 0b1011,
-    #[doc = "Bitwise OR"]                   ORR = 0b1100,
-    #[doc = "Move value"]                   MOV = 0b1101,
-    #[doc = "Bit clear"]                    BIC = 0b1110,
-    #[doc = "Move bitwise negated value"]   MVN = 0b1111,
-}
-
-impl ArmDPOP {
-    /// Checks whether this instruction does not
-    /// write any results to a destination register.
-    pub fn is_test(self) -> bool {
-        match self {
-            ArmDPOP::TST | ArmDPOP::TEQ | ArmDPOP::CMP | ArmDPOP::CMN => true,
-            _ => false,
-        }
-    }
-
-    /// Checks whether this instruction is a
-    /// move instruction.
-    pub fn is_move(self) -> bool {
-        match self {
-            ArmDPOP::MOV | ArmDPOP::MVN => true,
-            _ => false,
-        }
-    }
-}
-
-impl fmt::Display for ArmDPOP {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ArmDPOP::AND => write!(f, "and"),
-            ArmDPOP::EOR => write!(f, "eor"),
-            ArmDPOP::SUB => write!(f, "sub"),
-            ArmDPOP::RSB => write!(f, "rsb"),
-            ArmDPOP::ADD => write!(f, "add"),
-            ArmDPOP::ADC => write!(f, "adc"),
-            ArmDPOP::SBC => write!(f, "sbc"),
-            ArmDPOP::RSC => write!(f, "rsc"),
-            ArmDPOP::TST => write!(f, "tst"),
-            ArmDPOP::TEQ => write!(f, "teq"),
-            ArmDPOP::CMP => write!(f, "cmp"),
-            ArmDPOP::CMN => write!(f, "cmn"),
-            ArmDPOP::ORR => write!(f, "orr"),
-            ArmDPOP::MOV => write!(f, "mov"),
-            ArmDPOP::BIC => write!(f, "bic"),
-            ArmDPOP::MVN => write!(f, "mvn"),
-        }
-    }
-}
-
 
 /// A decoded ARM instruction providing lots
 /// of utility and decoding functions to ease
@@ -370,6 +214,25 @@ impl ArmInstruction {
     #[allow(non_snake_case)]
     pub fn Rm(&self) -> usize {
         ((self.raw >> 0) & 0b1111) as usize
+    }
+
+    /// Get the target co-processor's ID.
+    #[inline(always)]
+    pub fn cp_id(&self) -> usize { self.Rs() }
+
+    /// Get a 4-bit opcode for the target co-processor.
+    pub fn cp_opcode4(&self) -> u8 {
+        ((self.raw >> 20) & 0b1111) as u8
+    }
+
+    /// Get a 3-bit opcode for the target co-processor.
+    pub fn cp_opcode3(&self) -> u8 {
+        ((self.raw >> 21) & 0b0111) as u8
+    }
+
+    /// Get a 3-bit info number for the target co-processor.
+    pub fn cp_info(&self) -> u8 {
+        ((self.raw >> 5) & 0b0111) as u8
     }
 
     /// Calculates a shifted operand without carry flag.
@@ -810,284 +673,10 @@ impl ArmInstruction {
     }
 }
 
-
-
-impl fmt::Display for ArmInstruction {
-    /// Writes a disassembly of the given instruction to a formatter.
-    ///
-    /// # Params
-    /// - `f`: The formatter to write to.
-    ///
-    /// # Returns
-    /// - `Ok` if everything succeeded.
-    /// - `Err` in case of an error.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:#010X}\t", self.raw as u32));
-
-        let cond = self.condition();
-
-        match self.op {
-            ArmOpcode::Unknown        => write!(f, "<unknown>"),
-            ArmOpcode::SWI            => write!(f, "swi{}\t#{:#08X}", cond, self.comment()),
-            ArmOpcode::BX             => write!(f, "bx{}\tR{}", cond, self.Rm()),
-            ArmOpcode::B_BL           => write!(f, "b{}{}\t#{}", if self.is_branch_with_link() { "l" } else { "" }, cond, 8+self.branch_offset()),
-            ArmOpcode::MRS            => write!(f, "mrs{}\tR{}, {}", cond, self.Rd(), if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }),
-            ArmOpcode::MSR_Reg        => write!(f, "msr{}\t{}, R{}", cond, if self.is_accessing_spsr() { "SPSR" } else { "CPSR" }, self.Rm()),
-            ArmOpcode::LDRH_STRH_Reg  => write!(f, "{}{}{}\tR{}, [R{}{}, {}R{}{}{}",
-                if self.is_load() { "ldr" } else { "str" },
-                match (self.raw >> 5) & 0b11 {
-                    1 => "h",
-                    2 => "sb",
-                    3 => "sh",
-                    _ => unimplemented!(),
-                }, cond,
-                self.Rd(), self.Rn(), if self.is_pre_indexed() { "" } else { "]" },
-                if self.is_offset_added() { "" } else { "+" }, self.Rm(),
-                if self.is_pre_indexed() { "]" } else { "" },
-                if self.is_auto_incrementing() { "!" } else { "" }
-            ),
-            ArmOpcode::LDRH_STRH_Immediate => write!(f, "{}{}{}\tR{}, [R{}{}, #{}{}{}{}",
-                if self.is_load() { "ldr" } else { "str" },
-                match (self.raw >> 5) & 0b11 {
-                    1 => "h",
-                    2 => "sb",
-                    3 => "sh",
-                    _ => unimplemented!(),
-                }, cond,
-                self.Rd(), self.Rn(), if self.is_pre_indexed() { "" } else { "]" },
-                if self.is_offset_added() { "" } else { "+" }, self.split_offset8(),
-                if self.is_pre_indexed() { "]" } else { "" },
-                if self.is_auto_incrementing() { "!" } else { "" }
-            ),
-            ArmOpcode::LDR_STR => {
-                try!(write!(f, "{}{}{}{}\tR{}, ",
-                    if self.is_load() { "ldr" } else { "str" },
-                    if self.is_transfering_bytes() { "b" } else { "" }, cond,
-                    if !self.is_pre_indexed() & self.is_auto_incrementing() { "t" } else { "" },
-                    self.Rd()
-                ));
-                self.display_offset(f)
-            },
-            ArmOpcode::LDM_STM => {
-                try!(write!(f, "{}{}{}{}\tR{}{}, ",
-                    if self.is_load() { "ldm" } else { "stm" },
-                    if self.is_offset_added() { "i" } else { "d" },
-                    if self.is_pre_indexed()  { "b" } else { "a" },
-                    cond, self.Rn(),
-                    if self.is_auto_incrementing() { "!" } else { "" }
-                ));
-                self.display_register_list(f)
-            },
-            ArmOpcode::SWP => write!(f, "swp{}{}\tR{}, R{}, [R{}]",
-                if self.is_transfering_bytes() { "b" } else { "" },
-                cond, self.Rd(), self.Rm(), self.Rn()
-            ),
-            ArmOpcode::MUL_MLA => {
-                try!(write!(f, "{}{}{}\tR{}, R{}, R{}",
-                    if self.is_accumulating() { "mla" } else { "mul" },
-                    if self.is_setting_flags() { "s" } else { "" }, cond,
-                    self.Rn(), self.Rm(), self.Rs(),
-                ));
-                if self.is_accumulating() {
-                    write!(f, ", R{}", self.Rd())
-                }
-                else { Ok(()) }
-            },
-            ArmOpcode::MULL_MLAL => write!(f, "{}{}{}{}\tR{}, R{}, R{}, R{}",
-                if self.is_signed() { "s" } else { "u" },
-                if self.is_accumulating() { "mlal" } else { "mull" },
-                if self.is_setting_flags() { "s" } else { "" }, cond,
-                self.Rd(), self.Rn(), self.Rm(), self.Rs(),
-            ),
-            ArmOpcode::MSR_Immediate => {
-                try!(write!(f, "msr{}\t{}, ", cond, if self.is_accessing_spsr() { "SPSR_flg" } else { "CPSR_flg" }));
-                if !self.is_shift_field_register() { write!(f, "#{:#010X}", self.rotated_immediate() as u32) }
-                else { write!(f, "R{}", self.Rm()) }
-            },
-            ArmOpcode::DataProcessing => {
-                let op = self.dpop();
-                try!(write!(f, "{}{}{}\t", &op, cond, if self.is_setting_flags() && !op.is_test() { "s" } else { "" }));
-                if !op.is_test() { try!(write!(f, "R{}, ", self.Rd())); }
-                if !op.is_move() { try!(write!(f, "R{}, ", self.Rn())); }
-                self.display_shift(f)
-            },
-            ArmOpcode::CDP => write!(f, "cdp{}\tP{}, {}, C{}, C{}, C{}, {}",
-                cond, self.Rs(), (self.raw >> 20) & 0b1111, self.Rd(),
-                self.Rn(), self.Rm(), (self.raw >> 5) & 0b0111
-            ),
-            ArmOpcode::LDC_STC => write!(f, "{}{}{}\tP{}, C{}, [R{}{}, #{}{}{}",
-                if self.is_load() { "ldc" } else { "stc" },
-                if self.is_register_block_transfer() { "l" } else { "" },
-                cond, self.Rs(), self.Rd(), self.Rn(),
-                if self.is_pre_indexed() { "" } else { "]" },
-                self.offset8(),
-                if self.is_pre_indexed() { "]" } else { "" },
-                if self.is_auto_incrementing() { "!" } else { "" }
-            ),
-            ArmOpcode::MRC_MCR => write!(f, "{}{}\tP{}, {}, R{}, C{}, C{}, {}",
-                if self.is_load() { "mrc" } else { "mcr" }, cond, self.Rs(),
-                (self.raw >> 21) & 0b0111, self.Rd(), self.Rn(), self.Rm(),
-                (self.raw >>  5) & 0b0111
-            ),
-        }
-    }
-}
-
-
-
-#[cfg(test)]
-mod test {
-    use std::fmt::Write;
-
-    pub const INSTRUCTIONS_RAW: &'static [i32] = &[
-        // Use SWI to check condition decoding.
-        0b0000_1111_011101110111011101110111_u32 as i32,
-        0b0001_1111_011101110111011101110111_u32 as i32,
-        0b0010_1111_011101110111011101110111_u32 as i32,
-        0b0011_1111_011101110111011101110111_u32 as i32,
-        0b0100_1111_011101110111011101110111_u32 as i32,
-        0b0101_1111_011101110111011101110111_u32 as i32,
-        0b0110_1111_011101110111011101110111_u32 as i32,
-        0b0111_1111_011101110111011101110111_u32 as i32,
-        0b1000_1111_011101110111011101110111_u32 as i32,
-        0b1001_1111_011101110111011101110111_u32 as i32,
-        0b1010_1111_011101110111011101110111_u32 as i32,
-        0b1011_1111_011101110111011101110111_u32 as i32,
-        0b1100_1111_011101110111011101110111_u32 as i32,
-        0b1101_1111_011101110111011101110111_u32 as i32,
-        0b1110_1111_011101110111011101110111_u32 as i32,
-        0b1111_1111_011101110111011101110111_u32 as i32,
-
-        // Test BX, B, BL.
-        0b0000_000100101111111111110001_0111_u32 as i32,
-        0b0000_101_0_111111111111111111111101_u32 as i32,
-        0b0000_101_0_000000000000000000000001_u32 as i32,
-        0b0000_101_1_111111111111111111111101_u32 as i32,
-        0b0000_101_1_000000000000000000000001_u32 as i32,
-
-        // Test Unknown.
-        0b0000_011_01100110011001100110_1_0110_u32 as i32,
-
-        // Data Processing.
-        0b0000_00_1_0000_0_0001_0010_0011_01000101_u32 as i32,
-        0b0000_00_0_0001_1_0001_0010_00111_00_0_0011_u32 as i32,
-        0b0000_00_0_0010_0_0001_0010_00111_01_0_0011_u32 as i32,
-        0b0000_00_0_0011_0_0001_0010_00111_10_0_0011_u32 as i32,
-        0b0000_00_0_0100_0_0001_0010_00111_11_0_0011_u32 as i32,
-        0b0000_00_0_0101_0_0001_0010_00000_11_0_0011_u32 as i32,
-        0b0000_00_0_0110_0_0001_0010_00000_00_0_0011_u32 as i32,
-        0b0000_00_0_0111_0_0001_0010_0100_0_00_1_0011_u32 as i32,
-        0b0000_00_0_1000_0_0001_0010_0100_0_01_1_0011_u32 as i32,
-        0b0000_00_0_1001_0_0001_0010_0100_0_10_1_0011_u32 as i32,
-        0b0000_00_0_1010_0_0001_0010_0100_0_11_1_0011_u32 as i32,
-        0b0000_00_0_1011_0_0001_0010_00000_00_0_0011_u32 as i32,
-        0b0000_00_0_1100_0_0001_0010_00000_00_0_0011_u32 as i32,
-        0b0000_00_0_1101_0_0001_0010_00000_00_0_0011_u32 as i32,
-        0b0000_00_0_1110_0_0001_0010_00000_00_0_0011_u32 as i32,
-        0b0000_00_0_1111_0_0001_0010_00000_00_0_0011_u32 as i32,
-
-        // MRS and MSR.
-        0b0000_00010_0_001111_0001_000000000000_u32 as i32,
-        0b0000_00010_1_001111_0001_000000000000_u32 as i32,
-        0b0000_00010_0_101001111100000000_0010_u32 as i32,
-        0b0000_00_0_10_0_1010001111_00000000_0111_u32 as i32,
-        0b0000_00_0_10_1_1010001111_11111111_0111_u32 as i32,
-        0b0000_00_1_10_0_1010001111_0010_00001111_u32 as i32,
-
-        // Test MUL and MLA.
-        0b0000_000000_0_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_000000_0_1_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_000000_1_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_000000_1_1_0001_0010_0011_1001_0100_u32 as i32,
-
-        // Test MULL and MLAL.
-        0b0000_00001_0_0_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_0_0_1_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_0_1_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_0_1_1_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_1_0_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_1_0_1_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_1_1_0_0001_0010_0011_1001_0100_u32 as i32,
-        0b0000_00001_1_1_1_0001_0010_0011_1001_0100_u32 as i32,
-
-        // Test LDR and STR.
-        0b0000_01_0_0_0_0_0_0_0001_0010_011101110111_u32 as i32,
-        0b0000_01_0_0_0_0_0_1_0001_0010_011101110111_u32 as i32,
-    ];
-
-    pub const EXPECTED_DISASSEMBLY: &'static str = "\
-        0x0F777777\tswieq\t#0x777777\n\
-        0x1F777777\tswine\t#0x777777\n\
-        0x2F777777\tswihs\t#0x777777\n\
-        0x3F777777\tswilo\t#0x777777\n\
-        0x4F777777\tswimi\t#0x777777\n\
-        0x5F777777\tswipl\t#0x777777\n\
-        0x6F777777\tswivs\t#0x777777\n\
-        0x7F777777\tswivc\t#0x777777\n\
-        0x8F777777\tswihi\t#0x777777\n\
-        0x9F777777\tswils\t#0x777777\n\
-        0xAF777777\tswige\t#0x777777\n\
-        0xBF777777\tswilt\t#0x777777\n\
-        0xCF777777\tswigt\t#0x777777\n\
-        0xDF777777\tswile\t#0x777777\n\
-        0xEF777777\tswi\t#0x777777\n\
-        0xFF777777\tswinv\t#0x777777\n\
-        0x012FFF17\tbxeq\tR7\n\
-        0x0AFFFFFD\tbeq\t#-4\n\
-        0x0A000001\tbeq\t#12\n\
-        0x0BFFFFFD\tbleq\t#-4\n\
-        0x0B000001\tbleq\t#12\n\
-        0x06CCCCD6\t<unknown>\n\
-        0x02012345\tandeq\tR2, R1, #335544321\n\
-        0x00312383\teoreqs\tR2, R1, R3, lsl #7\n\
-        0x004123A3\tsubeq\tR2, R1, R3, lsr #7\n\
-        0x006123C3\trsbeq\tR2, R1, R3, asr #7\n\
-        0x008123E3\taddeq\tR2, R1, R3, ror #7\n\
-        0x00A12063\tadceq\tR2, R1, R3, rrx\n\
-        0x00C12003\tsbceq\tR2, R1, R3\n\
-        0x00E12413\trsceq\tR2, R1, R3, lsl R4\n\
-        0x01012433\ttsteq\tR1, R3, lsr R4\n\
-        0x01212453\tteqeq\tR1, R3, asr R4\n\
-        0x01412473\tcmpeq\tR1, R3, ror R4\n\
-        0x01612003\tcmneq\tR1, R3\n\
-        0x01812003\torreq\tR2, R1, R3\n\
-        0x01A12003\tmoveq\tR2, R3\n\
-        0x01C12003\tbiceq\tR2, R1, R3\n\
-        0x01E12003\tmvneq\tR2, R3\n\
-        0x010F1000\tmrseq\tR1, CPSR\n\
-        0x014F1000\tmrseq\tR1, SPSR\n\
-        0x0129F002\tmsreq\tCPSR, R2\n\
-        0x0128F007\tmsreq\tCPSR_flg, R7\n\
-        0x0168FFF7\tmsreq\tSPSR_flg, R7\n\
-        0x0328F20F\tmsreq\tCPSR_flg, #0xF0000000\n\
-        0x00012394\tmuleq\tR1, R4, R3\n\
-        0x00112394\tmulseq\tR1, R4, R3\n\
-        0x00212394\tmlaeq\tR1, R4, R3, R2\n\
-        0x00312394\tmlaseq\tR1, R4, R3, R2\n\
-        0x00812394\tumulleq\tR2, R1, R4, R3\n\
-        0x00912394\tumullseq\tR2, R1, R4, R3\n\
-        0x00A12394\tumlaleq\tR2, R1, R4, R3\n\
-        0x00B12394\tumlalseq\tR2, R1, R4, R3\n\
-        0x00C12394\tsmulleq\tR2, R1, R4, R3\n\
-        0x00D12394\tsmullseq\tR2, R1, R4, R3\n\
-        0x00E12394\tsmlaleq\tR2, R1, R4, R3\n\
-        0x00F12394\tsmlalseq\tR2, R1, R4, R3\n\
-        0x04012777\tstreq\tR2, [R1], #-1911\n\
-        0x04112777\t\n\0        0b0000_01_0_0_0_0_0_1_0001_0010_011101110111
-    ";
-
-    #[test]
-    pub fn instruction_disassembly() {
-        let mut dis = String::new();
-
-        for inst in self::INSTRUCTIONS_RAW {
-            writeln!(dis, "{}", super::ArmInstruction::decode(*inst).unwrap()).unwrap();
-        }
-
-        println!("\n========================\nExpected Disassembly:\n\n{}", self::EXPECTED_DISASSEMBLY);
-        println!("\n========================\nGenerated Disassembly:\n\n{}", dis);
-
-        assert!(dis == self::EXPECTED_DISASSEMBLY);
+impl Default for ArmInstruction {
+    /// Creates a NOP instruction.
+    fn default() -> ArmInstruction {
+        ArmInstruction::nop()
     }
 }
 
