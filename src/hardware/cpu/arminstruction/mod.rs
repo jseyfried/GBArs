@@ -80,7 +80,6 @@ use std::mem;
 
 use super::super::error::GbaError;
 use super::armcondition::ArmCondition;
-use std::fmt;
 
 pub use self::armdpop::*;
 pub use self::display::*;
@@ -102,10 +101,10 @@ pub enum ArmOpcode {
     #[doc = "See ArmDPOP"]                            DataProcessing,
     #[doc = "Move CPSR/SPSR into a register"]         MRS,
     #[doc = "Move a register into PSR flags"]         MSR_Reg,
-    #[doc = "Move an immediate into PSR flags"]       MSR_Immediate,
+    #[doc = "Move an immediate into PSR flags"]       MSR_Flags,
     #[doc = "Load/store register to/from memory"]     LDR_STR,
     #[doc = "Load/store halfwords"]                   LDRH_STRH_Reg,
-    #[doc = "Load/store halfwords"]                   LDRH_STRH_Immediate,
+    #[doc = "Load/store halfwords"]                   LDRH_STRH_Imm,
     #[doc = "Load/store multiple registers"]          LDM_STM,
     #[doc = "Swap register with memory"]              SWP,
     #[doc = "Software interrupt with comment"]        SWI,
@@ -161,11 +160,11 @@ impl ArmInstruction {
         else if (raw & 0x0F8000F0) == 0x00800090 { ArmOpcode::MULL_MLAL }
         else if (raw & 0x0FBF0FFF) == 0x010F0000 { ArmOpcode::MRS }
         else if (raw & 0x0FBFFFF0) == 0x0129F000 { ArmOpcode::MSR_Reg }
-        else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Immediate }
+        else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Flags }
         else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0C000000) == 0x04000000 { ArmOpcode::LDR_STR }
         else if (raw & 0x0E400F90) == 0x00000090 { ArmOpcode::LDRH_STRH_Reg }
-        else if (raw & 0x0E400090) == 0x00400090 { ArmOpcode::LDRH_STRH_Immediate }
+        else if (raw & 0x0E400090) == 0x00400090 { ArmOpcode::LDRH_STRH_Imm }
         else if (raw & 0x0E000000) == 0x08000000 { ArmOpcode::LDM_STM }
         else if (raw & 0x0F000000) == 0x0F000000 { ArmOpcode::SWI }
         else if (raw & 0x0F000010) == 0x0E000000 { ArmOpcode::CDP }
@@ -233,6 +232,11 @@ impl ArmInstruction {
     /// Get a 3-bit info number for the target co-processor.
     pub fn cp_info(&self) -> u8 {
         ((self.raw >> 5) & 0b0111) as u8
+    }
+
+    /// Gets the shift value for a shifted register.
+    pub fn register_shift_immediate(&self) -> u32 {
+        ((self.raw >> 7) & 0b1_1111) as u32
     }
 
     /// Calculates a shifted operand without carry flag.
@@ -487,6 +491,16 @@ impl ArmInstruction {
         (self.raw & (1 << 20)) != 0
     }
 
+    /// Cheks whether the register shift field is an
+    /// immediate or shift register.
+    ///
+    /// # Returns
+    /// - `true`: Shift `Rm` by an immediate.
+    /// - `false`: Shift `Rm` by `Rs`.
+    pub fn is_register_shift_immediate(&self) -> bool {
+        (self.raw & (1 << 4)) == 0
+    }
+
     /// Calculates a shifted register operand without
     /// calculating the carry flag.
     ///
@@ -609,19 +623,6 @@ impl ArmInstruction {
             })
         }
         else { Ok(r) }
-    }
-
-
-    // Below here is just a bunch of
-    // messy functions to display an
-    // instruction disassembly on demand.
-
-    fn display_shift(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_shift_field_register() {
-            try!(write!(f, "R{}", self.Rm()));
-            self.display_shift_op(f)
-        }
-        else { write!(f, "#{}", self.rotated_immediate()) }
     }
 }
 
