@@ -75,7 +75,7 @@ impl Default for CmdLineArgs {
             rom_file_path: None,
             log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
-            verbose: false,
+            verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
         }
     }
@@ -87,11 +87,11 @@ fn main() {
     let mut args = CmdLineArgs::default();
     parse_command_line(&mut args);
     configure_logging(&args);
-    handle_oneshot_commands(&args);
 
-    // Prepare the GBA.
+    // Prepare the GBA and handle oneshot commands.
     let mut gba = hardware::Gba::new();
     configure_gba_from_command_line(&mut gba, &args);
+    handle_oneshot_commands(&args, &gba);
 }
 
 
@@ -116,8 +116,8 @@ fn parse_command_line(args: &mut CmdLineArgs) {
     parser.refer(&mut args.verbose)
           .add_option(&["-v","--verbose"], StoreTrue, "Log extra messages and information.");
     parser.refer(&mut args.colour)
-          .add_option(&["-c","--with-colour"], StoreTrue, "Enable terminal logging with colour codes. (default)")
-          .add_option(&["-k","--without-colour"], StoreFalse, "Disable terminal logging with colour codes.");
+          .add_option(&["-c","--with-colour"], StoreTrue, "Enable terminal logging with ANSI colour codes. (default)")
+          .add_option(&["-k","--without-colour"], StoreFalse, "Disable terminal logging with ANSI colour codes.");
     parser.parse_args_or_exit();
 }
 
@@ -129,7 +129,7 @@ fn configure_logging(args: &CmdLineArgs) {
 }
 
 
-fn handle_oneshot_commands(args: &CmdLineArgs) {
+fn handle_oneshot_commands(args: &CmdLineArgs, gba: &hardware::Gba) {
     // Single ARM instruction to disassemble?
     if let Some(ref x) = args.single_disasm_arm {
         match u32::from_str_radix(x.as_str(), 16) {
@@ -137,7 +137,7 @@ fn handle_oneshot_commands(args: &CmdLineArgs) {
                 Ok(inst) => info!("DASM ARM:\t{}", inst),
                 Err(e)   => info!("DASM ARM invalid - {}", e),
             };},
-            Err(e) => { error!("{}", e); },
+            Err(e) => { error!("DASM ARM: {}\nRun `GBArs --help` for details.", e); },
         };
     }
 }

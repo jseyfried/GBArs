@@ -44,7 +44,8 @@ impl Log for ConsoleFileLogger {
                 let tmp = f.lock().unwrap();
                 writeln!(*(tmp.borrow_mut()), "{}", msg).unwrap();
             }
-            else { msg.push_str("\n\x1B[31m\x1B[1mNo log file!\x1B[0m"); }
+            else if self.colour { msg.push_str("\n\x1B[31m\x1B[1mNo log file!\x1B[0m"); }
+            else { msg.push_str("\nNo log file!"); }
 
             // Log to stdout.
             if !self.colour { println!("{}", msg); }
