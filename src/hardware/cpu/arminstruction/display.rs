@@ -146,8 +146,16 @@ impl ArmInstruction {
 
     fn fmt_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{{"));
+        let mut got_first = false;
         for i in 0 .. 16 {
-            if (self.raw & (1 << i)) != 0 { try!(write!(f, "{}, ", ArmInstruction::register_name(i))); }
+            if (self.raw & (1 << i)) != 0 {
+                if got_first {
+                    try!(write!(f, ", {}", ArmInstruction::register_name(i)));
+                } else {
+                    got_first = true;
+                    try!(write!(f, "{}", ArmInstruction::register_name(i)));
+                }
+            }
         }
         write!(f, "}}{}", if self.is_enforcing_user_mode() { "^" } else { "" })
     }
@@ -214,7 +222,7 @@ impl ArmInstruction {
             blk  = if self.is_register_block_transfer() { "l" } else { "" },
             cond = self.condition_name(), cpid = self.cp_id(), cd = self.Rd()
         ));
-        self.fmt_Rn_offset(f, format!("{}", self.offset8()))
+        self.fmt_Rn_offset(f, format!("#{:+}", self.offset8()))
     }
 
     fn fmt_ldm_stm(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -249,7 +257,7 @@ impl ArmInstruction {
 
     fn fmt_ldrh_strh_imm(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.fmt_ldrh_strh_common(f));
-        self.fmt_Rn_offset(f, format!("{:+}", self.split_offset8()))
+        self.fmt_Rn_offset(f, format!("#{:+}", self.split_offset8()))
     }
 
     fn fmt_mul_mla(&self, f: &mut fmt::Formatter) -> fmt::Result {
