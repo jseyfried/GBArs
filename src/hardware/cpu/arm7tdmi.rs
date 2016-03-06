@@ -6,6 +6,9 @@
 #![warn(missing_docs)]
 
 use std::mem;
+use std::u32;
+use super::arminstruction::{ArmInstruction, ArmOpcode};
+use super::super::error::GbaError;
 
 
 /// The CPU's instruction decoding states.
@@ -271,27 +274,35 @@ impl CPSR {
 
     /// Gets the current state of the N bit.
     #[allow(non_snake_case)]
-    pub fn N(self) -> bool {
-        0 != (self.0 & (1 << 31))
-    }
+    pub fn N(self) -> bool { 0 != (self.0 & (1 << 31)) }
 
     /// Gets the current state of the Z bit.
     #[allow(non_snake_case)]
-    pub fn Z(self) -> bool {
-        0 != (self.0 & (1 << 30))
-    }
+    pub fn Z(self) -> bool { 0 != (self.0 & (1 << 30)) }
 
     /// Gets the current state of the C bit.
     #[allow(non_snake_case)]
-    pub fn C(self) -> bool {
-        0 != (self.0 & (1 << 29))
-    }
+    pub fn C(self) -> bool { 0 != (self.0 & (1 << 29)) }
 
     /// Gets the current state of the V bit.
     #[allow(non_snake_case)]
-    pub fn V(self) -> bool {
-        0 != (self.0 & (1 << 28))
-    }
+    pub fn V(self) -> bool { 0 != (self.0 & (1 << 28)) }
+
+    /// Set the new state of the N bit.
+    #[allow(non_snake_case)]
+    pub fn set_N(&mut self, n: bool) { if n { self.0 |= (1 << 31); } else { self.0 &= !(1 << 31); } }
+
+    /// Set the new state of the Z bit.
+    #[allow(non_snake_case)]
+    pub fn set_Z(&mut self, n: bool) { if n { self.0 |= (1 << 30); } else { self.0 &= !(1 << 30); } }
+
+    /// Set the new state of the C bit.
+    #[allow(non_snake_case)]
+    pub fn set_C(&mut self, n: bool) { if n { self.0 |= (1 << 29); } else { self.0 &= !(1 << 29); } }
+
+    /// Set the new state of the V bit.
+    #[allow(non_snake_case)]
+    pub fn set_V(&mut self, n: bool) { if n { self.0 |= (1 << 28); } else { self.0 &= !(1 << 28); } }
 }
 
 
@@ -302,8 +313,9 @@ pub struct Arm7Tdmi {
     cpsr: CPSR,
     spsr: [u32; 7],
 
-    // Extra details.
-    nn: i32,
+    // Pipeline implementation.
+    decoded: ArmInstruction,
+    fetched: u32,
 
     // Register backups for mode changes.
     gpr_r8_r12_fiq: [i32; 5],
@@ -345,7 +357,8 @@ impl Arm7Tdmi {
             cpsr: CPSR(0),
             spsr: [0; 7],
 
-            nn: 0,
+            decoded: ArmInstruction::nop(),
+            fetched: ArmInstruction::NOP_RAW,
 
             gpr_r8_r12_fiq: [0; 5],
             gpr_r8_r12_other: [0; 5],
@@ -381,12 +394,22 @@ impl Arm7Tdmi {
 
     /// Causes an exception, switching execution modes and states.
     pub fn exception(&mut self, ex: Exception) {
-        let new_mode = ex.mode_on_entry();
+        self.change_mode(ex.mode_on_entry());
+        self.cpsr.set_state(State::ARM);
+        self.state = State::ARM;
+        self.cpsr.disable_irq();
+        if ex.disable_fiq_on_entry() { self.cpsr.disable_fiq(); }
+        // TODO LR = PC + whatevs
+        self.gpr[Arm7Tdmi::PC] = ex.vector_address() as i32;
+    }
+
+
+    fn change_mode(&mut self, new_mode: Mode) {
         let cmi = self.mode as u8 as usize;
         let nmi =  new_mode as u8 as usize;
 
         // Save banked registers R13, R14, SPSR.
-        let ret_addr = self.gpr[Arm7Tdmi::PC] + self.nn;
+        let ret_addr = self.gpr[Arm7Tdmi::PC] + 0; // TODO special offset by exception type
         self.gpr_r14_all[cmi] = self.gpr[14];
         self.gpr_r14_all[nmi] = ret_addr;
         self.gpr[14] = ret_addr;
@@ -408,10 +431,65 @@ impl Arm7Tdmi {
 
         // Apply new state.
         self.cpsr.set_mode(new_mode);
-        self.cpsr.set_state(State::ARM);
-        self.cpsr.disable_irq();
-        if ex.disable_fiq_on_entry() { self.cpsr.disable_fiq(); }
-        self.gpr[Arm7Tdmi::PC] = ex.vector_address() as i32;
+        self.mode = new_mode;
+    }
+
+    fn clear_pipeline(&mut self) {
+        self.decoded = ArmInstruction::nop();
+        self.fetched = ArmInstruction::NOP_RAW;
+    }
+
+    fn update_flags(&mut self, x: i32, y: u64) {
+        self.cpsr.set_N(x  < 0);
+        self.cpsr.set_Z(x == 0);
+        self.cpsr.set_C((y & 0x1_00000000_u64) != 0);
+        self.cpsr.set_V( y > (u32::MAX as u64));
+    }
+
+    #[allow(dead_code)] // TODO delete this
+    fn execute_arm_state(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+        let do_exec = try!(inst.condition().check(&self.cpsr));
+        if !do_exec { return Ok(()); }
+
+        match inst.opcode() {
+            ArmOpcode::BX      => self.execute_bx(inst),
+            ArmOpcode::B_BL    => self.execute_b_bl(inst),
+            ArmOpcode::MUL_MLA => self.execute_mul_mla(inst),
+            _ => unimplemented!(),
+        };
+
+        Ok(())
+    }
+
+    fn execute_bx(&mut self, inst: ArmInstruction) {
+        self.clear_pipeline();
+        let addr = self.gpr[inst.Rm()] as u32;
+        self.state = if (addr & 0b1) == 0 { State::ARM } else { State::THUMB };
+        self.cpsr.set_state(self.state);
+        self.gpr[15] = (addr & 0xFFFFFFFE) as i32;
+        // TODO missaligned PC in ARM state?
+    }
+
+    fn execute_b_bl(&mut self, inst: ArmInstruction) {
+        self.clear_pipeline();
+        if inst.is_branch_with_link() { self.gpr[14] = self.gpr[15].wrapping_sub(4); }
+        self.gpr[15] = self.gpr[15].wrapping_add(inst.branch_offset());
+    }
+
+    fn execute_mul_mla(&mut self, inst: ArmInstruction) {
+        if inst.is_setting_flags() { return self.execute_mul_mla_s(inst); }
+        let mut res = self.gpr[inst.Rs()].wrapping_mul(self.gpr[inst.Rm()]);
+        if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()]); }
+        self.gpr[inst.Rn()] = res;
+    }
+
+    fn execute_mul_mla_s(&mut self, inst: ArmInstruction) {
+        let mut res = (self.gpr[inst.Rs()] as u64).wrapping_mul(self.gpr[inst.Rm()] as u64);
+        if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()] as u64); }
+        let x = (res & 0x00000000_FFFFFFFF_u64) as i32;
+        self.update_flags(x, res);
+        self.cpsr.set_V(false);
+        self.gpr[inst.Rn()] = x;
     }
 }
 

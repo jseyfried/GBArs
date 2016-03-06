@@ -185,6 +185,11 @@ impl ArmInstruction {
         unsafe { mem::transmute(c) }
     }
 
+    /// Get the decoded opcode of the ARM instruction.
+    pub fn opcode(&self) -> ArmOpcode {
+        self.op
+    }
+
     /// Get the data processing opcode field of the ARM instruction.
     pub fn dpop(&self) -> ArmDPOP {
         let o = ((self.raw >> 21) & 0b1111) as u8;
