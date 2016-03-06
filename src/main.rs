@@ -133,7 +133,7 @@ fn handle_oneshot_commands(args: &CmdLineArgs) {
     // Single ARM instruction to disassemble?
     if let Some(ref x) = args.single_disasm_arm {
         match u32::from_str_radix(x.as_str(), 16) {
-            Ok(i) => { match hardware::cpu::ArmInstruction::decode(i as i32) {
+            Ok(i) => { match hardware::cpu::ArmInstruction::decode(i) {
                 Ok(inst) => info!("DASM ARM:\t{}", inst),
                 Err(e)   => info!("DASM ARM invalid - {}", e),
             };},

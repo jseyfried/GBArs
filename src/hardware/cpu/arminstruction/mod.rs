@@ -120,13 +120,13 @@ pub enum ArmOpcode {
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_snake_case)]
 pub struct ArmInstruction {
-    raw: i32,
+    raw: u32,
     op: ArmOpcode,
 }
 
 impl ArmInstruction {
     /// A raw 32-bit pseudo NOP instruction.
-    pub const NOP_RAW: i32 = 0b0000_00_0_1101_0_0000_0000_00000000_0000_u32 as i32;
+    pub const NOP_RAW: u32 = 0b0000_00_0_1101_0_0000_0000_00000000_0000_u32;
     //                         COND DP I MOV  S  Rn   Rd   LSL(0)   Rm
 
     /// Creates a pseudo NOP instruction.
@@ -150,18 +150,18 @@ impl ArmInstruction {
     /// # Returns
     /// - `Ok`: A successfully decoded ARM instruction.
     /// - `Err`: In case any unspecified instruction has been decoded.
-    pub fn decode(raw: i32) -> Result<ArmInstruction, GbaError> {
+    pub fn decode(raw: u32) -> Result<ArmInstruction, GbaError> {
         // Decode the opcode to something easier to match and read.
         let op: ArmOpcode =
              if (raw & 0x0FFFFFF0) == 0x012FFF10 { ArmOpcode::BX }
         else if (raw & 0x0E000000) == 0x0A000000 { ArmOpcode::B_BL }
         else if (raw & 0x0E000010) == 0x06000010 { ArmOpcode::Unknown }
+        else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0FC000F0) == 0x00000090 { ArmOpcode::MUL_MLA }
         else if (raw & 0x0F8000F0) == 0x00800090 { ArmOpcode::MULL_MLAL }
         else if (raw & 0x0FBF0FFF) == 0x010F0000 { ArmOpcode::MRS }
         else if (raw & 0x0FBFFFF0) == 0x0129F000 { ArmOpcode::MSR_Reg }
         else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Flags }
-        else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0C000000) == 0x04000000 { ArmOpcode::LDR_STR }
         else if (raw & 0x0E400F90) == 0x00000090 { ArmOpcode::LDRH_STRH_Reg }
         else if (raw & 0x0E400090) == 0x00400090 { ArmOpcode::LDRH_STRH_Imm }
@@ -172,7 +172,7 @@ impl ArmInstruction {
         else if (raw & 0x0E000000) == 0x0C000000 { ArmOpcode::LDC_STC }
         else if (raw & 0x0C000000) == 0x00000000 { ArmOpcode::DataProcessing }
         else {
-            return Err(GbaError::InvalidArmInstruction(raw as u32));
+            return Err(GbaError::InvalidArmInstruction(raw));
         };
 
         // Done decoding!
@@ -193,51 +193,35 @@ impl ArmInstruction {
 
     /// Get the index of register `Rn`.
     #[allow(non_snake_case)]
-    pub fn Rn(&self) -> usize {
-        ((self.raw >> 16) & 0b1111) as usize
-    }
+    pub fn Rn(&self) -> usize { ((self.raw >> 16) & 0b1111) as usize }
 
     /// Get the index of register `Rd`.
     #[allow(non_snake_case)]
-    pub fn Rd(&self) -> usize {
-        ((self.raw >> 12) & 0b1111) as usize
-    }
+    pub fn Rd(&self) -> usize { ((self.raw >> 12) & 0b1111) as usize }
 
     /// Get the index of register `Rs`.
     #[allow(non_snake_case)]
-    pub fn Rs(&self) -> usize {
-        ((self.raw >> 8) & 0b1111) as usize
-    }
+    pub fn Rs(&self) -> usize { ((self.raw >> 8) & 0b1111) as usize }
 
     /// Get the index of register `Rm`.
     #[allow(non_snake_case)]
-    pub fn Rm(&self) -> usize {
-        ((self.raw >> 0) & 0b1111) as usize
-    }
+    pub fn Rm(&self) -> usize { ((self.raw >> 0) & 0b1111) as usize }
 
     /// Get the target co-processor's ID.
     #[inline(always)]
     pub fn cp_id(&self) -> usize { self.Rs() }
 
     /// Get a 4-bit opcode for the target co-processor.
-    pub fn cp_opcode4(&self) -> u8 {
-        ((self.raw >> 20) & 0b1111) as u8
-    }
+    pub fn cp_opcode4(&self) -> u8 { ((self.raw >> 20) & 0b1111) as u8 }
 
     /// Get a 3-bit opcode for the target co-processor.
-    pub fn cp_opcode3(&self) -> u8 {
-        ((self.raw >> 21) & 0b0111) as u8
-    }
+    pub fn cp_opcode3(&self) -> u8 { ((self.raw >> 21) & 0b0111) as u8 }
 
     /// Get a 3-bit info number for the target co-processor.
-    pub fn cp_info(&self) -> u8 {
-        ((self.raw >> 5) & 0b0111) as u8
-    }
+    pub fn cp_info(&self) -> u8 { ((self.raw >> 5) & 0b0111) as u8 }
 
     /// Gets the shift value for a shifted register.
-    pub fn register_shift_immediate(&self) -> u32 {
-        ((self.raw >> 7) & 0b1_1111) as u32
-    }
+    pub fn register_shift_immediate(&self) -> u32 { (self.raw >> 7) & 0b1_1111 }
 
     /// Calculates a shifted operand without carry flag.
     ///
@@ -325,24 +309,18 @@ impl ArmInstruction {
     /// flag is set to subtract, then `-offset` will be returned,
     /// otherwise `offset` will be returned.
     pub fn split_offset8(&self) -> i32 {
-        let off = ((self.raw >> 4) & 0xF0) | (self.raw & 0x0F);
+        let off = (((self.raw >> 4) & 0xF0) | (self.raw & 0x0F)) as i32;
         if self.is_offset_added() { off } else { -off }
     }
 
     /// Get the 24-bit sign-extended branch offset.
-    pub fn branch_offset(&self) -> i32 {
-        ((self.raw << 8) as i32) >> 6
-    }
+    pub fn branch_offset(&self) -> i32 { (((self.raw << 8) as i32) >> 6) as i32 }
 
     /// Get the 24-bit comment field of an `SWI` instruction.
-    pub fn comment(&self) -> i32 {
-        (self.raw & 0x00FFFFFF) as i32
-    }
+    pub fn comment(&self) -> u32 { self.raw & 0x00FFFFFF }
 
     /// Get a 16-bit bitmap, where bit N corresponds to GPR N.
-    pub fn register_map(&self) -> u16 {
-        (self.raw & 0xFFFF) as u16
-    }
+    pub fn register_map(&self) -> u16 { (self.raw & 0xFFFF) as u16 }
 
     /// Determines whether a shift field is to be decoded as
     /// rotated immediate value or as a shifted register value.
@@ -350,9 +328,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Shift field is a register shift.
     /// - `false`: Shift field is a rotated immediate.
-    pub fn is_shift_field_register(&self) -> bool {
-        (self.raw & (1 << 25)) == 0
-    }
+    pub fn is_shift_field_register(&self) -> bool { (self.raw & (1 << 25)) == 0 }
 
     /// Decodes a rotated immediate value.
     ///
@@ -360,7 +336,7 @@ impl ArmInstruction {
     /// An immediate 32-bit value consisting of a single
     /// rotated byte.
     pub fn rotated_immediate(&self) -> i32 {
-        let bits = (2 * ((self.raw >> 8) & 0b1111)) as u32;
+        let bits = 2 * ((self.raw >> 8) & 0b1111);
         ((self.raw & 0xFF) as u32).rotate_right(bits) as i32
     }
 
@@ -371,18 +347,14 @@ impl ArmInstruction {
     /// - `true`: The offset is an immediate non-sign-extended value.
     /// - `false`: The offset is a shifted register value.
     #[inline(always)]
-    pub fn is_offset_field_immediate(&self) -> bool {
-        self.is_shift_field_register()
-    }
+    pub fn is_offset_field_immediate(&self) -> bool { self.is_shift_field_register() }
 
     /// Checks whether this is a `B` or `BL` instruction.
     ///
     /// # Returns:
     /// - `true`: `BL`
     /// - `false`: `B`
-    pub fn is_branch_with_link(&self) -> bool {
-        (self.raw & (1 << 24)) != 0
-    }
+    pub fn is_branch_with_link(&self) -> bool { (self.raw & (1 << 24)) != 0 }
 
     /// Checks whether an offset register should be
     /// pre-indexed or post-indexed.
@@ -390,9 +362,7 @@ impl ArmInstruction {
     /// # Returns:
     /// - `true`: pre-indexed
     /// - `false`: post-indexed
-    pub fn is_pre_indexed(&self) -> bool {
-        (self.raw & (1 << 24)) != 0
-    }
+    pub fn is_pre_indexed(&self) -> bool { (self.raw & (1 << 24)) != 0 }
 
     /// Checks whether a given offset should be added
     /// or subtracted from a base address.
@@ -400,9 +370,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Add the given offset to the base address.
     /// - `false`: Subtract the given offset from the base address.
-    pub fn is_offset_added(&self) -> bool {
-        (self.raw & (1 << 23)) != 0
-    }
+    pub fn is_offset_added(&self) -> bool { (self.raw & (1 << 23)) != 0 }
 
     /// Checks whether the given instruction accesses CPSR
     /// or the current SPSR.
@@ -410,9 +378,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Accessing the current SPSR.
     /// - `false`: Accessing CPSR.
-    pub fn is_accessing_spsr(&self) -> bool {
-        (self.raw & (1 << 22)) != 0
-    }
+    pub fn is_accessing_spsr(&self) -> bool { (self.raw & (1 << 22)) != 0 }
 
     /// Checks whether the given long instruction should
     /// act as a signed or unsigned operation.
@@ -420,9 +386,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: The operation is signed.
     /// - `false`: The operation is unsigned.
-    pub fn is_signed(&self) -> bool {
-        (self.raw & (1 << 22)) != 0
-    }
+    pub fn is_signed(&self) -> bool { (self.raw & (1 << 22)) != 0 }
 
     /// Checks whether a data transfer instruction should
     /// transfer bytes or words.
@@ -430,9 +394,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Transfer bytes.
     /// - `false`: Transfering words.
-    pub fn is_transfering_bytes(&self) -> bool {
-        (self.raw & (1 << 22)) != 0
-    }
+    pub fn is_transfering_bytes(&self) -> bool { (self.raw & (1 << 22)) != 0 }
 
     /// Checks whether register block transfer should be
     /// done in user mode.
@@ -440,9 +402,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Enforce user mode for privileged code.
     /// - `false`: Execute in current mode.
-    pub fn is_enforcing_user_mode(&self) -> bool {
-        (self.raw & (1 << 22)) != 0
-    }
+    pub fn is_enforcing_user_mode(&self) -> bool { (self.raw & (1 << 22)) != 0 }
 
     /// Checks whether a single register or a block of
     /// registers should be transfered to or from a
@@ -451,9 +411,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Transfer a block of registers.
     /// - `false`: Transfer a single register.
-    pub fn is_register_block_transfer(&self) -> bool {
-        (self.raw & (1 << 22)) != 0
-    }
+    pub fn is_register_block_transfer(&self) -> bool { (self.raw & (1 << 22)) != 0 }
 
     /// Checks whether a multiply instruction should
     /// accumulate or not.
@@ -461,15 +419,11 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Accumulate.
     /// - `false`: Don't accumulate.
-    pub fn is_accumulating(&self) -> bool {
-        (self.raw & (1 << 21)) != 0
-    }
+    pub fn is_accumulating(&self) -> bool { (self.raw & (1 << 21)) != 0 }
 
     /// Checks whether the current instruction writes
     /// a calculated address back to the base register.
-    pub fn is_auto_incrementing(&self) -> bool {
-        (self.raw & (1 << 21)) != 0
-    }
+    pub fn is_auto_incrementing(&self) -> bool { (self.raw & (1 << 21)) != 0 }
 
     /// Checks whether the given instruction updates the
     /// ZNCV status flags of CPSR.
@@ -477,9 +431,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Updates CPSR.
     /// - `false`: Does not modify CPSR.
-    pub fn is_setting_flags(&self) -> bool {
-        (self.raw & (1 << 20)) != 0
-    }
+    pub fn is_setting_flags(&self) -> bool { (self.raw & (1 << 20)) != 0 }
 
     /// Checks whether the given instruction is a
     /// load or store instruction.
@@ -487,9 +439,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Load instruction.
     /// - `false`: Store instruction.
-    pub fn is_load(&self) -> bool {
-        (self.raw & (1 << 20)) != 0
-    }
+    pub fn is_load(&self) -> bool { (self.raw & (1 << 20)) != 0 }
 
     /// Cheks whether the register shift field is an
     /// immediate or shift register.
@@ -497,9 +447,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: Shift `Rm` by an immediate.
     /// - `false`: Shift `Rm` by `Rs`.
-    pub fn is_register_shift_immediate(&self) -> bool {
-        (self.raw & (1 << 4)) == 0
-    }
+    pub fn is_register_shift_immediate(&self) -> bool { (self.raw & (1 << 4)) == 0 }
 
     /// Calculates a shifted register operand without
     /// calculating the carry flag.
@@ -628,9 +576,7 @@ impl ArmInstruction {
 
 impl Default for ArmInstruction {
     /// Creates a NOP instruction.
-    fn default() -> ArmInstruction {
-        ArmInstruction::nop()
-    }
+    fn default() -> ArmInstruction { ArmInstruction::nop() }
 }
 
 

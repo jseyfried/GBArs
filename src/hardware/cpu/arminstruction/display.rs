@@ -83,7 +83,7 @@ impl ArmInstruction {
             1 => "h",
             2 => "sb",
             3 => "sh",
-            _ => unimplemented!(),
+            _ => panic!("Opcode 00 is illegal, as it encodes other instructions. (MLA, SWP,...)"),
         }
     }
 
@@ -138,7 +138,7 @@ impl ArmInstruction {
 
     fn fmt_offs_field(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_offset_field_immediate() {
-            self.fmt_Rn_offset(f, format!("#{}", self.offset12()))
+            self.fmt_Rn_offset(f, format!("#{:+}", self.offset12()))
         } else {
             self.fmt_Rn_offset(f, format!("{}{}", self.off_sign_name(), self.string_shifted_Rm()))
         }
