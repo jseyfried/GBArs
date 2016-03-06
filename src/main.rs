@@ -29,6 +29,7 @@ extern crate byteorder;
 
 use argparse::{ArgumentParser, Print, Parse, ParseOption, StoreTrue, StoreFalse, StoreOption};
 use std::path::PathBuf;
+use std::process;
 
 pub mod logger;
 pub mod hardware;
@@ -54,7 +55,15 @@ pub struct CmdLineArgs {
     /// logs the result.
     pub single_disasm_arm: Option<String>,
 
+    /// Accepts `--dasm-thumb INST`.
+    ///
+    /// Disassembles a single THUMB instruction
+    /// and logs the result.
+    pub single_disasm_thumb: Option<String>,
+
     /// Accepts `-v` or `--verbose` as `true`.
+    ///
+    /// Also accepts `-q` or `--quiet` as `false`, which is the default value.
     ///
     /// If `false`, log messages of log level *debug*
     /// and *trace* will be ignored.
@@ -67,6 +76,12 @@ pub struct CmdLineArgs {
     /// If `true`, log messages sent to the console will be
     /// slightly colourised for improved readability.
     pub colour: bool,
+
+    /// Accepts `-x` or `--exit` as `true`.
+    ///
+    /// If `true`, exits after handling the command line
+    /// parameters instead of entering the main program.
+    pub exit: bool,
 }
 
 impl Default for CmdLineArgs {
@@ -75,8 +90,10 @@ impl Default for CmdLineArgs {
             rom_file_path: None,
             log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
+            single_disasm_thumb: None,
             verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
+            exit: false,
         }
     }
 }
@@ -92,6 +109,9 @@ fn main() {
     let mut gba = hardware::Gba::new();
     configure_gba_from_command_line(&mut gba, &args);
     handle_oneshot_commands(&args, &gba);
+
+    // Exit early?
+    if args.exit { trace!("Exiting early."); process::exit(0); }
 }
 
 
@@ -113,11 +133,20 @@ fn parse_command_line(args: &mut CmdLineArgs) {
                        The instruction must be a hex number without base, e.g. 01F7344, \
                        in Big Endian format, i.e. the most significant byte is left.")
           .metavar("INST");
+    parser.refer(&mut args.single_disasm_thumb)
+          .add_option(&["--dasm-thumb"], StoreOption,
+                      "Prints the disassembly of the given THUMB state instruction. \
+                       The instruction must be a hex number without base, e.h. 01F7, \
+                       in Big Endian format, i.e. the most significant byte is left.")
+          .metavar("INST");
     parser.refer(&mut args.verbose)
-          .add_option(&["-v","--verbose"], StoreTrue, "Log extra messages and information.");
+          .add_option(&["-v","--verbose"], StoreTrue, "Log extra messages and information.")
+          .add_option(&["-q","--quiet"], StoreFalse, "Log with less messages and information. (default)");
     parser.refer(&mut args.colour)
           .add_option(&["-c","--with-colour"], StoreTrue, "Enable terminal logging with ANSI colour codes. (default)")
           .add_option(&["-k","--without-colour"], StoreFalse, "Disable terminal logging with ANSI colour codes.");
+    parser.refer(&mut args.exit)
+          .add_option(&["-x","--exit"], StoreTrue, "Exit early after handling the command line arguments.");
     parser.parse_args_or_exit();
 }
 
@@ -130,16 +159,24 @@ fn configure_logging(args: &CmdLineArgs) {
 
 
 fn handle_oneshot_commands(args: &CmdLineArgs, gba: &hardware::Gba) {
-    // Single ARM instruction to disassemble?
-    if let Some(ref x) = args.single_disasm_arm {
-        match u32::from_str_radix(x.as_str(), 16) {
-            Ok(i) => { match hardware::cpu::ArmInstruction::decode(i) {
-                Ok(inst) => info!("DASM ARM:\t{}", inst),
-                Err(e)   => info!("DASM ARM invalid - {}", e),
-            };},
-            Err(e) => { error!("DASM ARM: {}\nRun `GBArs --help` for details.", e); },
-        };
+    // Single instructions to disassemble?
+    if let Some(ref x) = args.single_disasm_arm   { disasm_arm(x); }
+    if let Some(ref x) = args.single_disasm_thumb { disasm_thumb(x); }
+}
+
+fn disasm_arm(x: &String) {
+    match u32::from_str_radix(x.as_str(), 16) {
+        Ok(i) => { match hardware::cpu::ArmInstruction::decode(i) {
+            Ok(inst) => info!("DASM ARM:\t{}", inst),
+            Err(e)   => info!("DASM ARM invalid - {}", e),
+        };},
+        Err(e) => { error!("DASM ARM: {}\nRun `GBArs --help` for details.", e); },
     }
+}
+
+fn disasm_thumb(x: &String) {
+    error!("DASM THUMB: Not yet implemented!");
+    // TODO implement THUMB state instructions.
 }
 
 
