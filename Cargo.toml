@@ -26,6 +26,7 @@ argparse  = "^0.2"
 byteorder = "^0.4"
 
 [dev-dependencies]
+clippy = "^0.0.44"
 
 [features]
 default = []

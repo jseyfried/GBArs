@@ -97,4 +97,5 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 Licensed under the [Apache License 2.0](./LICENSE-APACHE.md).
 
-[https://www.apache.org/licenses/LICENSE-2.0.html](https://www.apache.org/licenses/LICENSE-2.0.html)
+- [https://www.apache.org/licenses/LICENSE-2.0.html](https://www.apache.org/licenses/LICENSE-2.0.html)
+- [https://tldrlegal.com/license/apache-license-2.0-(apache-2.0)](https://tldrlegal.com/license/apache-license-2.0-%28apache-2.0%29)
