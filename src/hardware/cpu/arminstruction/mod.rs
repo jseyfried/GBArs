@@ -79,7 +79,7 @@
 use std::mem;
 
 use super::super::error::GbaError;
-use super::armcondition::ArmCondition;
+use super::arm7tdmi::ArmCondition;
 
 pub use self::armdpop::*;
 pub use self::display::*;

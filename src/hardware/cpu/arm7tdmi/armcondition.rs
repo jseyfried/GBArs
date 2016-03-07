@@ -5,8 +5,8 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use super::super::error::GbaError;
-use super::arm7tdmi::CPSR;
+use super::super::super::error::GbaError;
+use super::CPSR;
 
 /// The condition field of an ARM instruction.
 #[derive(Debug, PartialEq, Clone, Copy)]
