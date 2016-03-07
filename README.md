@@ -33,17 +33,6 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	> a free hex editor / disk editor for Linux, Windows and MacOSX
 
 	So far my favourite hex editor. It is obviously a GUI application based on [wxWidgets](http://www.wxwidgets.org/).
-- **[MSYS2](https://sourceforge.net/p/msys2/wiki/MSYS2%20installation/)**
-
-	> A Cygwin-derived software distro for Windows using Arch Linux's Pacman
-
-	If you work on a Windows machine but find yourself wanting to use Bash, binutils, and other Linux tools, then this might be just what you needed.
-- **[Notepad++ Rust Syntax](https://github.com/pfalabella/Rust-notepadplusplus)**
-
-	> Notepad++ syntax highlighting for Rust.
-
-	There are some missing highlights like the keyword `crate`, but these are easily added by hand.
-
 - **[ATOM](https://atom.io/)**
 
     > A hackable text editor
@@ -73,6 +62,11 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 
 # References
+- **[Rustendo64](https://github.com/yupferris/rustendo64)**
+
+	> Livecoding a Nintendo 64 emulator in Rust :D
+
+	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams.
 - **[ProblemKaputt.de - GBATEK](http://problemkaputt.de/gbatek.htm)**
 
 	> GBATEK written 2001-2014 by Martin Korth, programming specs for the GBA and NDS hardware
@@ -93,11 +87,6 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	> The Rust community’s crate host
 
 	Rust's package manager. Here you can find almost all Rust packages, called "crates".
-- **[Rustendo64](https://github.com/yupferris/rustendo64)**
-
-	> Livecoding a Nintendo 64 emulator in Rust :D
-
-	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams.
 
 # License
 
