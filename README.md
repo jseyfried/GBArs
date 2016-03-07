@@ -47,13 +47,11 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	> Disassembly in the cloud.
 
 	As the name states: A website disassembling your binaries. Just copy and paste sections of your ROM files and have fun. Note that the GBA works in Little Endian mode.
-
 - **[ARM7TDMI Technical Reference Manual](http://www.atmel.com/Images/ddi0029g_7tdmi_r3_trm.pdf)**
 	
 	> This document is Open Access. This document has no restriction on distribution.
 	
-	This PDF also includes a data sheet on the THUMB state instruction set. There aren't, however, many detailed instructions on what the different opcodes actually do.
-
+	This PDF also includes a data sheet on the THUMB state instruction set. There aren't, however, no detailed notes on what the different instructions actually do, as this manual focuses more on delays and signals.
 - **[ARM7TDMI Instruction Set Reference](http://morrow.ece.wisc.edu/ECE353/arm7tdmi_instruction_set_reference.pdf)**
 
 	> Department of Electrical and Computer Engineering University of Wisconsin-Madison
