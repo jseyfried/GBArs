@@ -454,11 +454,26 @@ impl ArmInstruction {
     /// - `false`: Shift `Rm` by `Rs`.
     pub fn is_register_shift_immediate(&self) -> bool { (self.raw & (1 << 4)) == 0 }
 
+    /// Calculates the result of a shift field operand
+    /// without calculating the carry flag.
+    ///
+    /// # Params
+    /// - `regs`: A reference to the CPU's general purpose registers.
+    /// - `carry`: The current state of the carry flag. Used for RRX.
+    ///
+    /// # Returns
+    /// A ready-to-use operand.
+    pub fn calculate_shft_field(&self, regs: &[i32], carry: bool) -> i32 {
+        if self.is_shift_field_register() { self.calculate_shifted_register(regs, carry) }
+        else { self.rotated_immediate() }
+    }
+
     /// Calculates a shifted register operand without
     /// calculating the carry flag.
     ///
     /// # Params
     /// - `regs`: A reference to the CPU's general purpose registers.
+    /// - `carry`: The current state of the carry flag. Used for RRX.
     ///
     /// # Returns
     /// A ready-to-use operand.
@@ -492,6 +507,21 @@ impl ArmInstruction {
             3 => a.rotate_right(b % 32),
             _ => unreachable!(),
         }
+    }
+
+    /// Calculates the result of a shift field and
+    /// calculates the resulting carry flag.
+    ///
+    /// # Params
+    /// - `regs`: A reference to the CPU's general purpose registers.
+    /// - `carry`: The current state of the carry flag. Used for RRX.
+    ///
+    /// # Returns
+    /// - `.0`: A ready-to-use operand.
+    /// - `.1`: `true` if carry, otherwise `false`.
+    pub fn calculate_shft_field_with_carry(&self, regs: &[i32], carry: bool) -> (i32, bool) {
+        if self.is_shift_field_register() { self.calculate_shifted_register_with_carry(regs, carry) }
+        else { (self.rotated_immediate(), false) }
     }
 
     /// Calculates a shifted register operand and

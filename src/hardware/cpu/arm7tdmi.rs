@@ -7,7 +7,7 @@
 
 use std::mem;
 use std::u32;
-use super::arminstruction::{ArmInstruction, ArmOpcode};
+use super::arminstruction::{ArmInstruction, ArmOpcode, ArmDPOP};
 use super::super::error::GbaError;
 
 
@@ -290,19 +290,19 @@ impl CPSR {
 
     /// Set the new state of the N bit.
     #[allow(non_snake_case)]
-    pub fn set_N(&mut self, n: bool) { if n { self.0 |= (1 << 31); } else { self.0 &= !(1 << 31); } }
+    pub fn set_N(&mut self, n: bool) { if n { self.0 |= 1 << 31; } else { self.0 &= !(1 << 31); } }
 
     /// Set the new state of the Z bit.
     #[allow(non_snake_case)]
-    pub fn set_Z(&mut self, n: bool) { if n { self.0 |= (1 << 30); } else { self.0 &= !(1 << 30); } }
+    pub fn set_Z(&mut self, n: bool) { if n { self.0 |= 1 << 30; } else { self.0 &= !(1 << 30); } }
 
     /// Set the new state of the C bit.
     #[allow(non_snake_case)]
-    pub fn set_C(&mut self, n: bool) { if n { self.0 |= (1 << 29); } else { self.0 &= !(1 << 29); } }
+    pub fn set_C(&mut self, n: bool) { if n { self.0 |= 1 << 29; } else { self.0 &= !(1 << 29); } }
 
     /// Set the new state of the V bit.
     #[allow(non_snake_case)]
-    pub fn set_V(&mut self, n: bool) { if n { self.0 |= (1 << 28); } else { self.0 &= !(1 << 28); } }
+    pub fn set_V(&mut self, n: bool) { if n { self.0 |= 1 << 28; } else { self.0 &= !(1 << 28); } }
 }
 
 
@@ -452,9 +452,11 @@ impl Arm7Tdmi {
         if !do_exec { return Ok(()); }
 
         match inst.opcode() {
-            ArmOpcode::BX      => self.execute_bx(inst),
-            ArmOpcode::B_BL    => self.execute_b_bl(inst),
-            ArmOpcode::MUL_MLA => self.execute_mul_mla(inst),
+            ArmOpcode::BX             => self.execute_bx(inst),
+            ArmOpcode::B_BL           => self.execute_b_bl(inst),
+            ArmOpcode::MUL_MLA        => self.execute_mul_mla(inst),
+            ArmOpcode::MULL_MLAL      => self.execute_mull_mlal(inst),
+            ArmOpcode::DataProcessing => self.execute_data_processing(inst),
             _ => unimplemented!(),
         };
 
@@ -487,9 +489,65 @@ impl Arm7Tdmi {
         let mut res = (self.gpr[inst.Rs()] as u64).wrapping_mul(self.gpr[inst.Rm()] as u64);
         if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()] as u64); }
         let x = (res & 0x00000000_FFFFFFFF_u64) as i32;
-        self.update_flags(x, res);
-        self.cpsr.set_V(false);
         self.gpr[inst.Rn()] = x;
+        self.update_flags(x, res);
+        self.cpsr.set_V(false); // Does not set V.
+    }
+
+    fn execute_mull_mlal(&mut self, inst: ArmInstruction) {
+        let mut res: u64 = if inst.is_signed() {
+            (self.gpr[inst.Rs()] as i64).wrapping_mul(self.gpr[inst.Rm()] as i64) as u64
+        } else {
+            (self.gpr[inst.Rs()] as u64).wrapping_mul(self.gpr[inst.Rm()] as u64)
+        };
+        if inst.is_accumulating() {
+            res = res.wrapping_add(((self.gpr[inst.Rn()] as u64) << 32) | (self.gpr[inst.Rd()] as u64));
+        }
+        self.gpr[inst.Rn()] = ((res >> 32) & (u32::MAX as u64)) as i32;
+        self.gpr[inst.Rd()] = ((res >>  0) & (u32::MAX as u64)) as i32;
+
+        if inst.is_setting_flags() {
+            self.cpsr.set_N((res as i64) < 0);
+            self.cpsr.set_Z(res == 0);
+            self.cpsr.set_C((res & (1 << 32)) != 0);  // Unpredictable, i.e. do what you want.
+            self.cpsr.set_V(res > (u32::MAX as u64)); // Unpredictable, i.e. do what you want.
+        }
+    }
+
+    fn execute_data_processing(&mut self, inst: ArmInstruction) {
+        if inst.is_setting_flags() { return self.execute_data_processing_s(inst); }
+        let op2: i32 = inst.calculate_shft_field(&self.gpr[..], self.cpsr.C());
+        let rn: i32 = self.gpr[inst.Rn()];
+        let rd: &mut i32 = &mut self.gpr[inst.Rd()];
+        let c: i32 = if self.cpsr.C() { 1 } else { 0 };
+
+        match inst.dpop() {
+            ArmDPOP::AND => { *rd = rn & op2; },
+            ArmDPOP::EOR => { *rd = rn ^ op2; },
+            ArmDPOP::SUB => { *rd = rn.wrapping_sub(op2); },
+            ArmDPOP::RSB => { *rd = op2.wrapping_sub(rn); },
+            ArmDPOP::ADD => { *rd = rn.wrapping_add(op2); },
+            ArmDPOP::ADC => { *rd = rn.wrapping_add(op2).wrapping_add(c) },
+            ArmDPOP::SBC => { *rd = rn.wrapping_sub(op2).wrapping_sub(1-c); },
+            ArmDPOP::RSC => { *rd = op2.wrapping_sub(rn).wrapping_sub(1-c); },
+            ArmDPOP::TST => panic!("S bit for TST instruction not set!"),
+            ArmDPOP::TEQ => panic!("S bit for TEQ instruction not set!"),
+            ArmDPOP::CMP => panic!("S bit for CMP instruction not set!"),
+            ArmDPOP::CMN => panic!("S bit for CMN instruction not set!"),
+            ArmDPOP::ORR => { *rd = rn | op2; },
+            ArmDPOP::MOV => { *rd = op2; },
+            ArmDPOP::BIC => { *rd = rn & !op2; },
+            ArmDPOP::MVN => { *rd = !op2; },
+        }
+    }
+
+    fn execute_data_processing_s(&mut self, inst: ArmInstruction) {
+        let (op2, cshft) = inst.calculate_shft_field_with_carry(&self.gpr[..], self.cpsr.C());
+        let op2 = op2 as u64;
+        let rn: u64 = self.gpr[inst.Rn()] as u64;
+        let c: u64 = if self.cpsr.C() { 1 } else { 0 };
+        // TODO
+        unimplemented!()
     }
 }
 
