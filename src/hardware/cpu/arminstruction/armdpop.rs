@@ -47,6 +47,15 @@ impl ArmDPOP {
             _ => false,
         }
     }
+
+    /// Checks whether this instruction is a logical instruction.
+    pub fn is_logical(self) -> bool {
+        match self {
+            ArmDPOP::AND | ArmDPOP::EOR | ArmDPOP::TST | ArmDPOP::TEQ |
+            ArmDPOP::ORR | ArmDPOP::MOV | ArmDPOP::BIC | ArmDPOP::MVN => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for ArmDPOP {

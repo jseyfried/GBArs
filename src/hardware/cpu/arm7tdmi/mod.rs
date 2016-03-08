@@ -107,7 +107,7 @@ impl Arm7Tdmi {
 
     /// Causes an exception, switching execution modes and states.
     pub fn exception(&mut self, ex: Exception) {
-        self.change_mode(ex.mode_on_entry());
+        self.change_mode(ex.mode_on_entry()); // Also sets LR.
         self.cpsr.set_state(State::ARM);
         self.state = State::ARM;
         self.cpsr.disable_irq();

@@ -5,8 +5,8 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use super::super::memory::IO_REGISTERS_LEN;
-use super::super::memory::{RawBytes, Rom8, Rom16, Rom32, Ram8, Ram16, Ram32};
+use super::memory::IO_REGISTERS_LEN;
+use super::memory::{RawBytes, Rom8, Rom16, Rom32, Ram8, Ram16, Ram32};
 
 
 /// All memory-mapped GBA IO registers.
@@ -25,13 +25,8 @@ impl IoRegisters {
 }
 
 impl RawBytes for IoRegisters {
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] {
-        &(*self.0)[(offs as usize)..]
-    }
-
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] {
-        &mut (*self.0)[(offs as usize)..]
-    }
+    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] { &(*self.0)[(offs as usize)..] }
+    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] { &mut (*self.0)[(offs as usize)..] }
 }
 
 impl Rom8  for IoRegisters {}

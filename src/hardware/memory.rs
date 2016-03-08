@@ -324,7 +324,9 @@ pub trait Rom32 : RawBytes {
     /// as bounds checking should be done while converting
     /// global to local addresses.
     fn read_word(&self, offs: u32) -> u32 {
-        LittleEndian::read_u32( self.bytes(offs & !0b11) )
+        let w = LittleEndian::read_u32( self.bytes(offs & !0b11) );
+        if (offs & 0b11) != 0 { w.rotate_right(8 * (offs & 0b11)); }
+        w
     }
 }
 

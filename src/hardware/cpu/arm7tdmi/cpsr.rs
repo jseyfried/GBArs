@@ -58,6 +58,9 @@ impl CPSR {
     pub const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
     //                                   NZCV                       IFTMMMMM
 
+    /// Masks the flag bits of a PSR.
+    pub const FLAGS_MASK: u32 = 0xF0000000_u32;
+
     /// Sign flag bit.
     ///
     /// 1 if signed, otherwise 0.

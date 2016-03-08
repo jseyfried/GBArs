@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::io;
 
-use self::cpu::{Arm7Tdmi, IoRegisters};
+use self::cpu::Arm7Tdmi;
 pub use self::error::*;
 pub use self::gamepak::*;
 
@@ -17,6 +17,8 @@ pub mod cpu;
 pub mod memory;
 pub mod gamepak;
 pub mod error;
+pub mod ioregs;
+pub mod bus;
 
 
 /// This is the actual GBA emulator. It handles all the virtual hardware,
@@ -27,9 +29,6 @@ pub struct Gba {
     cpu: Arm7Tdmi,
 
     //
-    ioregs: IoRegisters,
-
-    //
     game_pak: GamePak,
 }
 
@@ -38,7 +37,6 @@ impl Gba {
     pub fn new() -> Gba {
         Gba {
             cpu: Arm7Tdmi::new(),
-            ioregs: IoRegisters::new(),
             game_pak: GamePak::new(),
         }
     }

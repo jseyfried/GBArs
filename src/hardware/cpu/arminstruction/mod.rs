@@ -179,6 +179,14 @@ impl ArmInstruction {
         Ok(ArmInstruction { raw: raw, op: op })
     }
 
+    //
+    pub fn check_is_valid(&self) -> Result<(), GbaError> {
+        match self.op {
+            ArmOpcode::BX   => { if self.Rm() == Arm7Tdmi::PC { warn!("Instruction is `bx PC`.") }; Ok(())},
+            ArmOpcode::B_BL => Ok(()),
+        }
+    }
+
     /// Get the condition field of the ARM instruction.
     pub fn condition(&self) -> ArmCondition {
         let c = ((self.raw >> 28) & 0b1111) as u8;
@@ -454,6 +462,19 @@ impl ArmInstruction {
     /// - `false`: Shift `Rm` by `Rs`.
     pub fn is_register_shift_immediate(&self) -> bool { (self.raw & (1 << 4)) == 0 }
 
+    /// Calculates the result of a PSR transfer shift
+    /// field operand.
+    ///
+    /// # Params
+    /// - `regs`: A reference to the CPU's general purpose registers.
+    ///
+    /// # Returns
+    /// A ready-to-use operand.
+    pub fn calculate_shsr_field(&self, regs: &[i32]) -> i32 {
+        if self.is_shift_field_register() { regs[self.Rm()] }
+        else { self.rotated_immediate() }
+    }
+
     /// Calculates the result of a shift field operand
     /// without calculating the carry flag.
     ///
@@ -481,9 +502,15 @@ impl ArmInstruction {
         // 0000 0000 RegM // ret = RegM
         // _imm _op0 RegM // ret = RegM SHIFT(op) _imm_
         // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
+        // 0000 0100 RegM // ret = 0, carry = RegM[31]
         // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
         if (self.raw & 0x0FF0) == 0 { return a; }
+
+        // Decode LSR32?
+        if (self.raw & 0x0FF0) == 0x40 { return 0; }
+        // TODO ASR32
+        // TODO ROR32?
 
         // Decode RRX?
         if (self.raw & 0x0FF0) == 0x60 {
@@ -540,7 +567,10 @@ impl ArmInstruction {
         // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
         // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
-        if (self.raw & 0x0FF0) == 0 { return (a, false); }
+        if (self.raw & 0x0FF0) == 0 { return (a, carry); }
+
+        // Decode LSR32?
+        if (self.raw & 0x0FF0) == 0x40 { return (0, a < 0); }
 
         // Decode RRX?
         if (self.raw & 0x0FF0) == 0x60 {

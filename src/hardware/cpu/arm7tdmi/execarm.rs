@@ -10,6 +10,8 @@ use super::*;
 use super::super::arminstruction::*;
 use super::super::super::error::*;
 
+// TODO clear pipeline in loop if PC_now != PC_prev
+
 impl Arm7Tdmi {
     /// Immediately executes a single ARM state instruction.
     ///
@@ -32,6 +34,8 @@ impl Arm7Tdmi {
             ArmOpcode::DataProcessing => self.execute_data_processing(inst),
             ArmOpcode::MRS            => self.execute_mrs(inst),
             ArmOpcode::MSR_Reg        => self.execute_msr_reg(inst),
+            ArmOpcode::MSR_Flags      => self.execute_msr_flags(inst),
+            ArmOpcode::LDR_STR        => self.execute_ldr_str(inst),
             _ => unimplemented!(),
         };
 
@@ -39,7 +43,6 @@ impl Arm7Tdmi {
     }
 
     fn execute_bx(&mut self, inst: ArmInstruction) {
-        self.clear_pipeline();
         let addr = self.gpr[inst.Rm()] as u32;
         self.state = if (addr & 0b1) == 0 { State::ARM } else { State::THUMB };
         self.cpsr.set_state(self.state);
@@ -48,7 +51,6 @@ impl Arm7Tdmi {
     }
 
     fn execute_b_bl(&mut self, inst: ArmInstruction) {
-        self.clear_pipeline();
         if inst.is_branch_with_link() { self.gpr[14] = self.gpr[15].wrapping_sub(4); }
         self.gpr[15] = self.gpr[15].wrapping_add(inst.branch_offset());
     }
@@ -120,56 +122,85 @@ impl Arm7Tdmi {
         // TODO this code needs improvement!
         let (op2, cshft) = inst.calculate_shft_field_with_carry(&self.gpr[..], self.cpsr.C());
         let op2 = op2 as u64;
-        let rn: u64 = self.gpr[inst.Rn()] as u64;
+        let rn: u64 = self.gpr[inst.Rn()] as u64; // TODO buggy overflow check!
         let c: u64 = if self.cpsr.C() { 1 } else { 0 }; // TODO cshft or CPSR.C?
-        let mut late_cv = true;
-        let mut no_wb   = false;
-        let mut lspsr   = false;
+        let op = inst.dpop();
 
-        let res: u64 = match inst.dpop() {
-            ArmDPOP::AND => { late_cv = false; self.cpsr.set_C(cshft); rn & op2 },
-            ArmDPOP::EOR => { late_cv = false; self.cpsr.set_C(cshft); rn ^ op2 },
+        let res: u64 = match op {
+            ArmDPOP::AND => { rn & op2 },
+            ArmDPOP::EOR => { rn ^ op2 },
             ArmDPOP::SUB => { rn.wrapping_sub(op2) },
             ArmDPOP::RSB => { op2.wrapping_sub(rn) },
             ArmDPOP::ADD => { rn.wrapping_add(op2) },
             ArmDPOP::ADC => { rn.wrapping_add(op2).wrapping_add(c) },
             ArmDPOP::SBC => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
             ArmDPOP::RSC => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
-            ArmDPOP::TST => { no_wb = true; late_cv = false; self.cpsr.set_C(cshft); rn & op2 },
-            ArmDPOP::TEQ => { no_wb = true; late_cv = false; self.cpsr.set_C(cshft); rn ^ op2 },
+            ArmDPOP::TST => { no_wb = true; rn & op2 },
+            ArmDPOP::TEQ => { no_wb = true; rn ^ op2 },
             ArmDPOP::CMP => { no_wb = true; rn.wrapping_sub(op2) },
             ArmDPOP::CMN => { no_wb = true; rn.wrapping_add(op2) },
-            ArmDPOP::ORR => { late_cv = false; self.cpsr.set_C(cshft); rn | op2 },
+            ArmDPOP::ORR => { rn | op2 },
             ArmDPOP::MOV => { lspsr = inst.Rd() == Arm7Tdmi::PC; op2 },
-            ArmDPOP::BIC => { late_cv = false; self.cpsr.set_C(cshft); rn & !op2 },
+            ArmDPOP::BIC => { rn & !op2 },
             ArmDPOP::MVN => { lspsr = inst.Rd() == Arm7Tdmi::PC; !op2 },
         };
 
         let rd = (res & (u32::MAX as u64)) as i32;
 
-        if lspsr { self.cpsr = CPSR(self.spsr[self.mode as u8 as usize]); }
-        else {
+        if op.is_move() & (inst.Rd() == Arm7Tdmi::PC) {
+            self.cpsr = CPSR(self.spsr[self.mode as u8 as usize]);
+        } else {
             self.cpsr.set_N(rd < 0);
             self.cpsr.set_Z(rd == 0);
-            if late_cv {
+            if op.is_logical() {
+                self.cpsr.set_C(cshft);
+            } else {
                 self.cpsr.set_C(0 != (res & (1 << 32)));
                 self.cpsr.set_V(res > (u32::MAX as u64));
             }
         }
 
-        if !no_wb { self.gpr[inst.Rd()] = rd; }
+        if !op.is_test() { self.gpr[inst.Rd()] = rd; }
     }
 
     fn execute_mrs(&mut self, inst: ArmInstruction) {
-        if inst.is_accessing_spsr() {
-            self.gpr[inst.Rd()] = self.spsr[self.mode as u8 as usize] as i32;
+        self.gpr[inst.Rd()] = if inst.is_accessing_spsr() {
+            if self.mode == Mode::User { panic!("Mode USR doesn't have an SPSR!"); }
+            self.spsr[self.mode as u8 as usize] as i32
         } else {
-            self.gpr[inst.Rd()] = self.cpsr.0 as i32;
-        }
+            self.cpsr.0 as i32
+        };
     }
 
     fn execute_msr_reg(&mut self, inst: ArmInstruction) {
-        // TODO decoding seems to be wrong? (fields)
+        let rm = self.gpr[inst.Rm()] as u32;
+        if self.mode == Mode::User {
+            // User mode can only set the flag bits of CPSR.
+            if inst.is_accessing_spsr() { panic!("Mode USR doesn't have an SPSR!"); }
+            Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, rm);
+        } else {
+            if inst.is_accessing_spsr() { Arm7Tdmi::override_psr(&mut self.spsr[self.mode as u8 as usize], rm); }
+            else { Arm7Tdmi::override_psr(&mut self.cpsr.0, rm); }
+            // Mode might have changed.
+            let old_mode = self.cpsr.mode();
+            self.change_mode(old_mode);
+        }
+    }
+
+    fn execute_msr_flags(&mut self, inst: ArmInstruction) {
+        let op = inst.calculate_shsr_field(&self.gpr[..]) as u32;
+        if inst.is_accessing_spsr() {
+            if self.mode == Mode::User { panic!("Mode USR doesn't have an SPSR!"); }
+            Arm7Tdmi::override_psr_flags(&mut self.spsr[self.mode as u8 as usize], op);
+        } else {
+            Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, op);
+        }
+    }
+
+    fn override_psr(psr: &mut u32, val: u32) { *psr = (val & CPSR::NON_RESERVED_MASK) | (*psr & !CPSR::NON_RESERVED_MASK); }
+    fn override_psr_flags(cpsr: &mut u32, val: u32) { *cpsr = (val & CPSR::FLAGS_MASK) | (*cpsr & !CPSR::FLAGS_MASK); }
+
+    fn execute_ldr_str(&mut self, inst: ArmInstruction) {
         unimplemented!()
     }
 }

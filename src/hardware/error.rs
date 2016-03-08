@@ -25,6 +25,12 @@ pub enum GbaError {
 
     /// Tried accessing an invalid physical address.
     InvalidPhysicalAddress(u32),
+
+    /// Tried writing to a ROM.
+    InvalidRomAccess(u32),
+
+    /// Tried accessing `.1` bits data at the memory location `.0`.
+    InvalidMemoryBusWidth(u32, u8),
 }
 
 impl error::Error for GbaError {
@@ -33,7 +39,9 @@ impl error::Error for GbaError {
             GbaError::InvalidArmInstruction(_)   => "Invalid instruction in ARM state.",
             GbaError::InvalidThumbInstruction(_) => "Invalid instruction in THUMB state.",
             GbaError::ReservedArmConditionNV     => "Invalid NV condition in ARM state.",
-            GbaError::InvalidPhysicalAddress(_)  => "Invalid physical address."
+            GbaError::InvalidPhysicalAddress(_)  => "Invalid physical address.",
+            GbaError::InvalidRomAccess(_)        => "Invalid write attempt to a ROM.",
+            GbaError::InvalidMemoryBusWidth(_,_) => "Invalid bus width while accessing memory.",
         }
     }
 }
@@ -45,6 +53,8 @@ impl fmt::Display for GbaError {
             GbaError::InvalidThumbInstruction(x) => write!(f, "Invalid THUMB Instruction {:#06X}", x),
             GbaError::ReservedArmConditionNV     => write!(f, "Invalid ARM condition NV"),
             GbaError::InvalidPhysicalAddress(x)  => write!(f, "Invalid physical address {:#010X}", x),
+            GbaError::InvalidRomAccess(x)        => write!(f, "Invalid write attempt to a ROM at {:#010X}", x),
+            GbaError::InvalidMemoryBusWidth(x,w) => write!(f, "Invalid {}-bit bus while accessing memory at {:#010X}", w, x),
         }
     }
 }
