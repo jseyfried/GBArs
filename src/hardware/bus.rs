@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 use super::memory::*;
+use super::gamepak::*;
 use super::ioregs::*;
 use super::error::*;
 
@@ -13,6 +14,7 @@ use super::error::*;
 /// Implements the memory and bus system of the GBA.
 pub struct Bus {
     ioregs: IoRegisters,
+    game_pak: GamePak,
 }
 
 impl Bus {
@@ -20,8 +22,15 @@ impl Bus {
     pub fn new() -> Bus {
         Bus {
             ioregs: IoRegisters::new(),
+            game_pak: GamePak::new(),
         }
     }
+
+    /// Get a reference to the connected GamePak.
+    pub fn game_pak<'a>(&'a self) -> &'a GamePak { &self.game_pak }
+
+    /// Get a mutable reference to the connected GamePak.
+    pub fn game_pak_mut<'a>(&'a mut self) -> &'a mut GamePak { &mut self.game_pak }
 
     /// Loads a word from the memory system.
     ///

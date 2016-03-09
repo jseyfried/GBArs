@@ -136,7 +136,7 @@ fn parse_command_line(args: &mut CmdLineArgs) {
     parser.refer(&mut args.single_disasm_thumb)
           .add_option(&["--dasm-thumb"], StoreOption,
                       "Prints the disassembly of the given THUMB state instruction. \
-                       The instruction must be a hex number without base, e.h. 01F7, \
+                       The instruction must be a hex number without base, e.g. 01F7, \
                        in Big Endian format, i.e. the most significant byte is left.")
           .metavar("INST");
     parser.refer(&mut args.verbose)

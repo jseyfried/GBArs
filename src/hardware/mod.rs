@@ -11,6 +11,7 @@ use std::io;
 use self::cpu::Arm7Tdmi;
 pub use self::error::*;
 pub use self::gamepak::*;
+pub use self::bus::*;
 
 
 pub mod cpu;
@@ -25,11 +26,8 @@ pub mod bus;
 /// loads and saves ROMs and SRAMs, executes the CPU instructions, and
 /// what not.
 pub struct Gba {
-    //
     cpu: Arm7Tdmi,
-
-    //
-    game_pak: GamePak,
+    bus: Bus,
 }
 
 impl Gba {
@@ -37,7 +35,7 @@ impl Gba {
     pub fn new() -> Gba {
         Gba {
             cpu: Arm7Tdmi::new(),
-            game_pak: GamePak::new(),
+            bus: Bus::new(),
         }
     }
 
@@ -56,7 +54,7 @@ impl Gba {
     /// - `Ok` if loaded successfully.
     /// - `Err` if an error occurred. The previous data might be damaged.
     pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        self.game_pak.load_rom_from_file(fp)
+        self.bus.game_pak_mut().load_rom_from_file(fp)
     }
 
     /// Get a handle for the ROM's header.
@@ -68,7 +66,7 @@ impl Gba {
     /// # Returns
     /// A ROM header handle.
     pub fn rom_header<'a>(&'a self) -> GamePakRomHeader<'a> {
-        self.game_pak.header()
+        self.bus.game_pak().header()
     }
 }
 

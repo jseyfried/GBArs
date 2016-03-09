@@ -79,7 +79,7 @@
 use std::mem;
 
 use super::super::error::GbaError;
-use super::arm7tdmi::ArmCondition;
+use super::arm7tdmi::{Arm7Tdmi, ArmCondition};
 
 pub use self::armdpop::*;
 pub use self::display::*;
@@ -159,9 +159,9 @@ impl ArmInstruction {
         else if (raw & 0x0FB00FF0) == 0x01000090 { ArmOpcode::SWP }
         else if (raw & 0x0FC000F0) == 0x00000090 { ArmOpcode::MUL_MLA }
         else if (raw & 0x0F8000F0) == 0x00800090 { ArmOpcode::MULL_MLAL }
-        else if (raw & 0x0FBF0FFF) == 0x010F0000 { ArmOpcode::MRS }
-        else if (raw & 0x0FBFFFF0) == 0x0129F000 { ArmOpcode::MSR_Reg }
-        else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Flags }
+        else if (raw & 0x0FBF0FFF) == 0x010F0000 { ArmOpcode::MRS } // Order matters here, as...
+        else if (raw & 0x0FBFFFF0) == 0x0129F000 { ArmOpcode::MSR_Reg } // ... these here are subsets...
+        else if (raw & 0x0DBFF000) == 0x0128F000 { ArmOpcode::MSR_Flags } // ... of DataProcessing.
         else if (raw & 0x0C000000) == 0x04000000 { ArmOpcode::LDR_STR }
         else if (raw & 0x0E400F90) == 0x00000090 { ArmOpcode::LDRH_STRH_Reg }
         else if (raw & 0x0E400090) == 0x00400090 { ArmOpcode::LDRH_STRH_Imm }
@@ -179,11 +179,62 @@ impl ArmInstruction {
         Ok(ArmInstruction { raw: raw, op: op })
     }
 
-    //
+    /// Checks an instruction's validity.
+    ///
+    /// Some instructions have constraints on how to use them,
+    /// e.g. some forbid to use PC as a destination register.
+    ///
+    /// ## Returns
+    /// - `Ok`: The instruction might have unpredictable side effects, but it is valid.
+    /// - `Err`: The instruction violates the CPU's constraints.
     pub fn check_is_valid(&self) -> Result<(), GbaError> {
+        let pc = Arm7Tdmi::PC; let rn = self.Rn(); let rd = self.Rd(); let rs = self.Rs(); let rm = self.Rm();
+
+        // Check for an invalid use of PC.
+        if rn==pc { match self.op {
+            ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL | ArmOpcode::LDM_STM => {
+                return Err(GbaError::InvalidUseOfR15);
+            },
+            ArmOpcode::LDC_STC | ArmOpcode::LDR_STR | ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm
+            if self.is_auto_incrementing() => { return Err(GbaError::InvalidUseOfR15); },
+            _ => {},
+        }}
+        if rd==pc { match self.op {
+            ArmOpcode::MRS | ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL => {
+                return Err(GbaError::InvalidUseOfR15)
+            },
+            _ => {},
+        }}
+        if rs==pc { match self.op {
+            ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL => { return Err(GbaError::InvalidUseOfR15); },
+            _ => {},
+        }}
+        if rm==pc { match self.op {
+            ArmOpcode::MSR_Reg | ArmOpcode::MSR_Flags | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL |
+            ArmOpcode::LDR_STR | ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm => {
+                return Err(GbaError::InvalidUseOfR15);
+            },
+            _ => {},
+        }}
+
+        // Check register usage for multiplication.
+        if rd==rm && (
+            (self.op == ArmOpcode::MUL_MLA)
+        || ((self.op == ArmOpcode::MULL_MLAL) && ((rn==rm) | (rn==rd)))
+        ) { return Err(GbaError::InvalidRegisterReuse(rn,rd,rs,rm)); }
+
+        // Check valid write-back.
         match self.op {
-            ArmOpcode::BX   => { if self.Rm() == Arm7Tdmi::PC { warn!("Instruction is `bx PC`.") }; Ok(())},
-            ArmOpcode::B_BL => Ok(()),
+            ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm => {
+                if self.is_auto_incrementing() & !self.is_pre_indexed() { Err(GbaError::InvalidOffsetWriteBack) }
+                else { Ok(()) }
+            },
+            ArmOpcode::LDM_STM => {
+                let has15 = 0 != (self.raw & 0x8000);
+                if !(self.is_load() & has15) & self.is_enforcing_user_mode() { Err(GbaError::InvalidOffsetWriteBack) }
+                else { Ok(()) }
+            },
+            _ => Ok(()),
         }
     }
 
@@ -499,32 +550,24 @@ impl ArmInstruction {
     /// # Returns
     /// A ready-to-use operand.
     pub fn calculate_shifted_register(&self, regs: &[i32], carry: bool) -> i32 {
-        // 0000 0000 RegM // ret = RegM
-        // _imm _op0 RegM // ret = RegM SHIFT(op) _imm_
-        // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
-        // 0000 0100 RegM // ret = 0, carry = RegM[31]
-        // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
-        if (self.raw & 0x0FF0) == 0 { return a; }
 
-        // Decode LSR32?
-        if (self.raw & 0x0FF0) == 0x40 { return 0; }
-        // TODO ASR32
-        // TODO ROR32?
-
-        // Decode RRX?
-        if (self.raw & 0x0FF0) == 0x60 {
-            let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
-            return bit31 | (((a as u32) >> 1) as i32);
-        }
+        // Handle special shifts.
+        if (self.raw & 0x0F90) == 0 { match (self.raw >> 5) & 0b11 {
+            0 => { return a; },
+            1 => { return 0; },
+            2 => { return a >> 31; },
+            3 => { // RRX
+                let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
+                return bit31 | (((a as u32) >> 1) as i32);
+            },
+            _ => unreachable!(),
+        }}
 
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
             ((self.raw >> 7) & 0b1_1111) as u32
         } else {
-            match self.decode_Rs_shift(a, regs) {
-                Ok(x) => x,
-                Err(y) => { return y; },
-            }
+            match self.decode_Rs_shift(a, regs) { Ok(x) => x, Err(y) => { return y; }, }
         };
 
         match (self.raw >> 5) & 0b11 {
@@ -562,30 +605,25 @@ impl ArmInstruction {
     /// - `.0`: A ready-to-use operand.
     /// - `.1`: `true` if carry, otherwise `false`.
     pub fn calculate_shifted_register_with_carry(&self, regs: &[i32], carry: bool) -> (i32, bool) {
-        // 0000 0000 RegM // ret = RegM
-        // _imm _op0 RegM // ret = RegM SHIFT(op) _imm_
-        // RegS 0op1 RegM // ret = RegM SHIFT(op) RegS
-        // 0000 0110 RegM // ret = RegM RRX 1
         let a = regs[self.Rm()];
-        if (self.raw & 0x0FF0) == 0 { return (a, carry); }
 
-        // Decode LSR32?
-        if (self.raw & 0x0FF0) == 0x40 { return (0, a < 0); }
-
-        // Decode RRX?
-        if (self.raw & 0x0FF0) == 0x60 {
-            let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
-            return (bit31 | (((a as u32) >> 1) as i32), 0 != (a & 0b1));
-        }
+        // Handle special shifts.
+        if (self.raw & 0x0F90) == 0 { match (self.raw >> 5) & 0b11 {
+            0 => { return (a, carry); },
+            1 => { return (0, a < 0); },
+            2 => { return (a >> 31, a < 0); },
+            3 => { // RRX
+                let bit31: i32 = if carry { 0x80000000_u32 as i32 } else { 0 };
+                return (bit31 | (((a as u32) >> 1) as i32), 0 != (a & 0b1));
+            },
+            _ => unimplemented!(),
+        }}
 
         // A shift by Rs==0 just returns `a` without a new carry flag.
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
             ((self.raw >> 7) & 0b1_1111) as u32
         } else {
-            match self.decode_Rs_shift_with_carry(a, regs, carry) {
-                Ok(x) => x,
-                Err(y) => { return y; },
-            }
+            match self.decode_Rs_shift_with_carry(a, regs, carry) { Ok(x) => x, Err(y) => { return y; }, }
         };
 
         let carry_right = 0 != (a.wrapping_shr(b - 1) & 0b1);
@@ -605,15 +643,13 @@ impl ArmInstruction {
         let r = (regs[self.Rs()] & 0xFF) as u32;
         if r == 0 { return Err(a); }
 
-        if r >= 32 {
-            Err(match (self.raw >> 5) & 0b11 {
-                0 => 0,
-                1 => 0,
-                2 => a >> 31,
-                3 => if r == 32 { a } else { a.rotate_right(r % 32) },
-                _ => unreachable!(),
-            })
-        }
+        if r >= 32 { Err(match (self.raw >> 5) & 0b11 {
+            0 => 0,
+            1 => 0,
+            2 => a >> 31,
+            3 => if r == 32 { a } else { a.rotate_right(r % 32) },
+            _ => unreachable!(),
+        })}
         else { Ok(r) }
     }
 

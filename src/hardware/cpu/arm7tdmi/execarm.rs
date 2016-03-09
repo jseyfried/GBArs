@@ -67,8 +67,9 @@ impl Arm7Tdmi {
         if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()] as u64); }
         let x = (res & 0x00000000_FFFFFFFF_u64) as i32;
         self.gpr[inst.Rn()] = x;
-        self.update_flags(x, res);
-        self.cpsr.set_V(false); // Does not set V.
+        self.cpsr.set_N(x < 0);
+        self.cpsr.set_Z(x == 0); // TODO x or res?
+        self.cpsr.set_C(false); // "some meaningless value"
     }
 
     fn execute_mull_mlal(&mut self, inst: ArmInstruction) {
@@ -86,8 +87,8 @@ impl Arm7Tdmi {
         if inst.is_setting_flags() {
             self.cpsr.set_N((res as i64) < 0);
             self.cpsr.set_Z(res == 0);
-            self.cpsr.set_C((res & (1 << 32)) != 0);  // Unpredictable, i.e. do what you want.
-            self.cpsr.set_V(res > (u32::MAX as u64)); // Unpredictable, i.e. do what you want.
+            self.cpsr.set_C(false); // "some meaningless value"
+            self.cpsr.set_V(false); // "some meaningless value"
         }
     }
 
@@ -107,10 +108,10 @@ impl Arm7Tdmi {
             ArmDPOP::ADC => { *rd = rn.wrapping_add(op2).wrapping_add(c) },
             ArmDPOP::SBC => { *rd = rn.wrapping_sub(op2).wrapping_sub(1-c); },
             ArmDPOP::RSC => { *rd = op2.wrapping_sub(rn).wrapping_sub(1-c); },
-            ArmDPOP::TST => panic!("S bit for TST instruction not set!"),
-            ArmDPOP::TEQ => panic!("S bit for TEQ instruction not set!"),
-            ArmDPOP::CMP => panic!("S bit for CMP instruction not set!"),
-            ArmDPOP::CMN => panic!("S bit for CMN instruction not set!"),
+            ArmDPOP::TST => panic!("TST that should be MSR/MRS!"),
+            ArmDPOP::TEQ => panic!("TEQ that should be MSR/MRS!"),
+            ArmDPOP::CMP => panic!("CMP that should be MSR/MRS!"),
+            ArmDPOP::CMN => panic!("CMN that should be MSR/MRS!"),
             ArmDPOP::ORR => { *rd = rn | op2; },
             ArmDPOP::MOV => { *rd = op2; },
             ArmDPOP::BIC => { *rd = rn & !op2; },
@@ -127,27 +128,23 @@ impl Arm7Tdmi {
         let op = inst.dpop();
 
         let res: u64 = match op {
-            ArmDPOP::AND => { rn & op2 },
-            ArmDPOP::EOR => { rn ^ op2 },
-            ArmDPOP::SUB => { rn.wrapping_sub(op2) },
-            ArmDPOP::RSB => { op2.wrapping_sub(rn) },
-            ArmDPOP::ADD => { rn.wrapping_add(op2) },
-            ArmDPOP::ADC => { rn.wrapping_add(op2).wrapping_add(c) },
-            ArmDPOP::SBC => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
-            ArmDPOP::RSC => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
-            ArmDPOP::TST => { no_wb = true; rn & op2 },
-            ArmDPOP::TEQ => { no_wb = true; rn ^ op2 },
-            ArmDPOP::CMP => { no_wb = true; rn.wrapping_sub(op2) },
-            ArmDPOP::CMN => { no_wb = true; rn.wrapping_add(op2) },
-            ArmDPOP::ORR => { rn | op2 },
-            ArmDPOP::MOV => { lspsr = inst.Rd() == Arm7Tdmi::PC; op2 },
-            ArmDPOP::BIC => { rn & !op2 },
-            ArmDPOP::MVN => { lspsr = inst.Rd() == Arm7Tdmi::PC; !op2 },
+            ArmDPOP::AND | ArmDPOP::TST => { rn & op2 },
+            ArmDPOP::EOR | ArmDPOP::TEQ => { rn ^ op2 },
+            ArmDPOP::SUB | ArmDPOP::CMP => { rn.wrapping_sub(op2) },
+            ArmDPOP::RSB                => { op2.wrapping_sub(rn) },
+            ArmDPOP::ADD | ArmDPOP::CMN => { rn.wrapping_add(op2) },
+            ArmDPOP::ADC                => { rn.wrapping_add(op2).wrapping_add(c) },
+            ArmDPOP::SBC                => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
+            ArmDPOP::RSC                => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
+            ArmDPOP::ORR                => { rn | op2 },
+            ArmDPOP::MOV                => { op2 },
+            ArmDPOP::BIC                => { rn & !op2 },
+            ArmDPOP::MVN                => { !op2 },
         };
 
         let rd = (res & (u32::MAX as u64)) as i32;
 
-        if op.is_move() & (inst.Rd() == Arm7Tdmi::PC) {
+        if inst.Rd() == Arm7Tdmi::PC {
             self.cpsr = CPSR(self.spsr[self.mode as u8 as usize]);
         } else {
             self.cpsr.set_N(rd < 0);
@@ -176,11 +173,15 @@ impl Arm7Tdmi {
         let rm = self.gpr[inst.Rm()] as u32;
         if self.mode == Mode::User {
             // User mode can only set the flag bits of CPSR.
-            if inst.is_accessing_spsr() { panic!("Mode USR doesn't have an SPSR!"); }
+            if inst.is_accessing_spsr() { panic!("Mode USR doesn't have an SPSR!"); } // TODO Err and log
             Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, rm);
         } else {
             if inst.is_accessing_spsr() { Arm7Tdmi::override_psr(&mut self.spsr[self.mode as u8 as usize], rm); }
-            else { Arm7Tdmi::override_psr(&mut self.cpsr.0, rm); }
+            else {
+                let s = self.cpsr.state();
+                Arm7Tdmi::override_psr(&mut self.cpsr.0, rm);
+                if self.cpsr.state() != s { warn!("MSR_Reg changed the T bit!"); }
+            }
             // Mode might have changed.
             let old_mode = self.cpsr.mode();
             self.change_mode(old_mode);

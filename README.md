@@ -70,11 +70,6 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	> GBATEK written 2001-2014 by Martin Korth, programming specs for the GBA and NDS hardware
 
 	A pretty detailed one-page with almost all the information you need.
-- **[GBADEV.org](http://www.gbadev.org/docs.php)**
-
-	> It started as a website aiming to share development information about the then unreleased GBA system. Here we are, 16 years later, doing the same thing. Who would have thought?
-
-	The first GBA reference site I stumbled upon.
 - **[Rust Programming Language](https://www.rust-lang.org/)**
 
 	> Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
