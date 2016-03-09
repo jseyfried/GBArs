@@ -43,11 +43,13 @@ impl Arm7Tdmi {
     }
 
     fn execute_bx(&mut self, inst: ArmInstruction) {
-        let addr = self.gpr[inst.Rm()] as u32;
+        let rm = inst.Rm();
+        if rm == Arm7Tdmi::PC { warn!("Executing `bx PC`!"); }
+        let addr = self.gpr[rm] as u32;
         self.state = if (addr & 0b1) == 0 { State::ARM } else { State::THUMB };
         self.cpsr.set_state(self.state);
         self.gpr[15] = (addr & 0xFFFFFFFE) as i32;
-        // TODO missaligned PC in ARM state?
+        // FIXME missaligned PC in ARM state?
     }
 
     fn execute_b_bl(&mut self, inst: ArmInstruction) {
@@ -63,12 +65,11 @@ impl Arm7Tdmi {
     }
 
     fn execute_mul_mla_s(&mut self, inst: ArmInstruction) {
-        let mut res = (self.gpr[inst.Rs()] as u64).wrapping_mul(self.gpr[inst.Rm()] as u64);
-        if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()] as u64); }
-        let x = (res & 0x00000000_FFFFFFFF_u64) as i32;
+        let mut x = self.gpr[inst.Rs()].wrapping_mul(self.gpr[inst.Rm()]);
+        if inst.is_accumulating() { x = x.wrapping_add(self.gpr[inst.Rd()]); }
         self.gpr[inst.Rn()] = x;
         self.cpsr.set_N(x < 0);
-        self.cpsr.set_Z(x == 0); // TODO x or res?
+        self.cpsr.set_Z(x == 0);
         self.cpsr.set_C(false); // "some meaningless value"
     }
 
@@ -96,53 +97,50 @@ impl Arm7Tdmi {
         if inst.is_setting_flags() { return self.execute_data_processing_s(inst); }
         let op2: i32 = inst.calculate_shft_field(&self.gpr[..], self.cpsr.C());
         let rn: i32 = self.gpr[inst.Rn()];
-        let rd: &mut i32 = &mut self.gpr[inst.Rd()];
         let c: i32 = if self.cpsr.C() { 1 } else { 0 };
 
-        match inst.dpop() {
-            ArmDPOP::AND => { *rd = rn & op2; },
-            ArmDPOP::EOR => { *rd = rn ^ op2; },
-            ArmDPOP::SUB => { *rd = rn.wrapping_sub(op2); },
-            ArmDPOP::RSB => { *rd = op2.wrapping_sub(rn); },
-            ArmDPOP::ADD => { *rd = rn.wrapping_add(op2); },
-            ArmDPOP::ADC => { *rd = rn.wrapping_add(op2).wrapping_add(c) },
-            ArmDPOP::SBC => { *rd = rn.wrapping_sub(op2).wrapping_sub(1-c); },
-            ArmDPOP::RSC => { *rd = op2.wrapping_sub(rn).wrapping_sub(1-c); },
+        self.gpr[inst.Rd()] = match inst.dpop() {
+            ArmDPOP::AND => { rn & op2 },
+            ArmDPOP::EOR => { rn ^ op2 },
+            ArmDPOP::SUB => { rn.wrapping_sub(op2) },
+            ArmDPOP::RSB => { op2.wrapping_sub(rn) },
+            ArmDPOP::ADD => { rn.wrapping_add(op2) },
+            ArmDPOP::ADC => { rn.wrapping_add(op2).wrapping_add(c) },
+            ArmDPOP::SBC => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
+            ArmDPOP::RSC => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
             ArmDPOP::TST => panic!("TST that should be MSR/MRS!"),
             ArmDPOP::TEQ => panic!("TEQ that should be MSR/MRS!"),
             ArmDPOP::CMP => panic!("CMP that should be MSR/MRS!"),
             ArmDPOP::CMN => panic!("CMN that should be MSR/MRS!"),
-            ArmDPOP::ORR => { *rd = rn | op2; },
-            ArmDPOP::MOV => { *rd = op2; },
-            ArmDPOP::BIC => { *rd = rn & !op2; },
-            ArmDPOP::MVN => { *rd = !op2; },
-        }
+            ArmDPOP::ORR => { rn | op2 },
+            ArmDPOP::MOV => { op2 },
+            ArmDPOP::BIC => { rn & !op2 },
+            ArmDPOP::MVN => { !op2 },
+        };
     }
 
     fn execute_data_processing_s(&mut self, inst: ArmInstruction) {
-        // TODO this code needs improvement!
         let (op2, cshft) = inst.calculate_shft_field_with_carry(&self.gpr[..], self.cpsr.C());
-        let op2 = op2 as u64;
-        let rn: u64 = self.gpr[inst.Rn()] as u64; // TODO buggy overflow check!
-        let c: u64 = if self.cpsr.C() { 1 } else { 0 }; // TODO cshft or CPSR.C?
+        let rn = self.gpr[inst.Rn()];
+        let c = if self.cpsr.C() { 1 } else { 0 }; // TODO cshft or CPSR.C?
         let op = inst.dpop();
+        let mut cf = false;
+        let mut vf = false;
 
-        let res: u64 = match op {
+        let rd: i32 = match op {
             ArmDPOP::AND | ArmDPOP::TST => { rn & op2 },
             ArmDPOP::EOR | ArmDPOP::TEQ => { rn ^ op2 },
-            ArmDPOP::SUB | ArmDPOP::CMP => { rn.wrapping_sub(op2) },
-            ArmDPOP::RSB                => { op2.wrapping_sub(rn) },
-            ArmDPOP::ADD | ArmDPOP::CMN => { rn.wrapping_add(op2) },
-            ArmDPOP::ADC                => { rn.wrapping_add(op2).wrapping_add(c) },
-            ArmDPOP::SBC                => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
-            ArmDPOP::RSC                => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
+            ArmDPOP::SUB | ArmDPOP::CMP => { Arm7Tdmi::sub_carry_overflow(rn, op2, &mut cf, &mut vf) },
+            ArmDPOP::RSB                => { Arm7Tdmi::sub_carry_overflow(op2, rn, &mut cf, &mut vf) },
+            ArmDPOP::ADD | ArmDPOP::CMN => { Arm7Tdmi::add_carry_overflow(rn, op2, &mut cf, &mut vf) },
+            ArmDPOP::ADC                => { Arm7Tdmi::add_carry_overflow(rn, op2.wrapping_add(c), &mut cf, &mut vf) },
+            ArmDPOP::SBC                => { Arm7Tdmi::sub_carry_overflow(rn, op2.wrapping_sub(1-c), &mut cf, &mut vf) },
+            ArmDPOP::RSC                => { Arm7Tdmi::sub_carry_overflow(op2, rn.wrapping_sub(1-c), &mut cf, &mut vf) },
             ArmDPOP::ORR                => { rn | op2 },
             ArmDPOP::MOV                => { op2 },
             ArmDPOP::BIC                => { rn & !op2 },
             ArmDPOP::MVN                => { !op2 },
         };
-
-        let rd = (res & (u32::MAX as u64)) as i32;
 
         if inst.Rd() == Arm7Tdmi::PC {
             self.cpsr = CPSR(self.spsr[self.mode as u8 as usize]);
@@ -152,12 +150,26 @@ impl Arm7Tdmi {
             if op.is_logical() {
                 self.cpsr.set_C(cshft);
             } else {
-                self.cpsr.set_C(0 != (res & (1 << 32)));
-                self.cpsr.set_V(res > (u32::MAX as u64));
+                self.cpsr.set_C(cf);
+                self.cpsr.set_V(vf);
             }
         }
 
         if !op.is_test() { self.gpr[inst.Rd()] = rd; }
+    }
+    fn add_carry_overflow(a: i32, b: i32, c: &mut bool, v: &mut bool) -> i32 {
+        let res64: u64 = (a as u32 as u64).wrapping_add(b as u32 as u64);
+        *c = 0 != (res64 & (1 << 32));
+        let x = a.overflowing_add(b);
+        *v = x.1;
+        x.0
+    }
+    fn sub_carry_overflow(a: i32, b: i32, c: &mut bool, v: &mut bool) -> i32 {
+        let res64: u64 = (a as u32 as u64).wrapping_sub(b as u32 as u64);
+        *c = 0 != (res64 & (1 << 32));
+        let x = a.overflowing_sub(b);
+        *v = x.1;
+        x.0
     }
 
     fn execute_mrs(&mut self, inst: ArmInstruction) {
