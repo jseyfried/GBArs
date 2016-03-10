@@ -47,6 +47,9 @@ pub enum GbaError {
 
     /// Writing an offset back to a base register where the instruction shouldn't.
     InvalidOffsetWriteBack,
+
+    /// Tried executing a privileged instruction in user mode.
+    PrivilegedUserCode,
 }
 
 impl error::Error for GbaError {
@@ -61,6 +64,7 @@ impl error::Error for GbaError {
             GbaError::InvalidUseOfR15               => "Invalid use of PC in an instruction.",
             GbaError::InvalidRegisterReuse(_,_,_,_) => "Invalid re-use of registers in an instruction.",
             GbaError::InvalidOffsetWriteBack        => "Invalid write-back of an offset to a base register.",
+            GbaError::PrivilegedUserCode            => "Invalid privileged instruction in user mode.",
         }
     }
 }
@@ -76,6 +80,7 @@ impl fmt::Display for GbaError {
             GbaError::InvalidMemoryBusWidth(x,w) => write!(f, "Invalid {}-bit bus while accessing memory at {:#010X}", w, x),
             GbaError::InvalidUseOfR15            => write!(f, "Invalid use of PC in an instruction."),
             GbaError::InvalidOffsetWriteBack     => write!(f, "Invalid write-back of an offset to a base register."),
+            GbaError::PrivilegedUserCode         => write!(f, "Invalid privileged instruction in user mode."),
             GbaError::InvalidRegisterReuse(n,d,s,m) => {
                 write!(f, "Invalid re-use of the same register. Rn={}, Rd={}, Rs={}, Rm={}", n, d, s, m)
             },
