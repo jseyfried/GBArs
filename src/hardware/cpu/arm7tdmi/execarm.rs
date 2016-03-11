@@ -238,7 +238,6 @@ impl Arm7Tdmi {
 
              if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
         else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
-        unimplemented!()
     }
 }
 
