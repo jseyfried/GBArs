@@ -224,6 +224,20 @@ impl Arm7Tdmi {
     fn override_psr_flags(cpsr: &mut u32, val: u32) { *cpsr = (val & CPSR::FLAGS_MASK) | (*cpsr & !CPSR::FLAGS_MASK); }
 
     fn execute_ldr_str(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+        let mut base = self.gpr[inst.Rn()] as u32;
+        let offs = inst.shifted_offset(&self.gpr[..], self.cpsr.C()) as u32;
+        if inst.is_pre_indexed() { base = base.wrapping_add(offs); }
+
+        if inst.is_load() { // FIXME Rd_usr if post indexing and W-bit?
+            if inst.is_transfering_bytes() { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_byte(base)); }
+            else                           { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_word(base)); }
+        } else {
+            if inst.is_transfering_bytes() { try!(self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])); }
+            else                           { try!(self.bus.borrow_mut().store_word(base, self.gpr[inst.Rd()])); }
+        }
+
+             if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
+        else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
         unimplemented!()
     }
 }

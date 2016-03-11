@@ -183,12 +183,14 @@ fn disasm_thumb(x: &String) {
 fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) {
     // Load ROM now if a path is given.
     if let Some(ref fp) = args.rom_file_path {
-        if let Err(e) = gba.load_rom_from_file(fp.as_path()) {
+        if let Err(e) = gba.game_pak_mut().load_rom_from_file(fp.as_path()) {
             error!("Failed loading the ROM file:\n{}", e);
             return;
         }
-        info!("Loaded the game {}.", gba.rom_header());
-        debug!("Header valid? {}", gba.rom_header().complement_check());
+        let gpak  = gba.game_pak();
+        let gpakh = (*gpak).header();
+        info!("Loaded the game {}.", gpakh);
+        debug!("Header valid? {}", gpakh.complement_check());
     }
 }
 

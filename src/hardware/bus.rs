@@ -5,6 +5,9 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use super::memory::*;
 use super::gamepak::*;
 use super::ioregs::*;
@@ -14,23 +17,17 @@ use super::error::*;
 /// Implements the memory and bus system of the GBA.
 pub struct Bus {
     ioregs: IoRegisters,
-    game_pak: GamePak,
+    game_pak: Rc<RefCell<GamePak>>,
 }
 
 impl Bus {
     /// Creates a new memory and bus system object.
-    pub fn new() -> Bus {
+    pub fn new(gpak: Rc<RefCell<GamePak>>) -> Bus {
         Bus {
             ioregs: IoRegisters::new(),
-            game_pak: GamePak::new(),
+            game_pak: gpak,
         }
     }
-
-    /// Get a reference to the connected GamePak.
-    pub fn game_pak<'a>(&'a self) -> &'a GamePak { &self.game_pak }
-
-    /// Get a mutable reference to the connected GamePak.
-    pub fn game_pak_mut<'a>(&'a mut self) -> &'a mut GamePak { &mut self.game_pak }
 
     /// Loads a word from the memory system.
     ///

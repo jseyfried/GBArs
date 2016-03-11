@@ -549,7 +549,7 @@ impl ArmInstruction {
     ///
     /// # Returns
     /// A ready-to-use operand.
-    pub fn calculate_shifted_register(&self, regs: &[i32], carry: bool) -> i32 {
+    pub fn calculate_shifted_register(&self, regs: &[i32], carry: bool) -> i32 { // FIXME Configure handling Rs.
         let a = regs[self.Rm()];
 
         // Handle special shifts.

@@ -5,13 +5,13 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use std::path::Path;
-use std::io;
+use std::cell::{RefCell, Ref, RefMut};
+use std::rc::Rc;
 
 use self::cpu::Arm7Tdmi;
+use self::bus::*;
 pub use self::error::*;
 pub use self::gamepak::*;
-pub use self::bus::*;
 
 
 pub mod cpu;
@@ -27,47 +27,27 @@ pub mod bus;
 /// what not.
 pub struct Gba {
     cpu: Arm7Tdmi,
-    bus: Bus,
+    bus: Rc<RefCell<Bus>>,
+    game_pak: Rc<RefCell<GamePak>>,
 }
 
 impl Gba {
     /// Creates a new GBA emulator instance.
     pub fn new() -> Gba {
+        let gpak = Rc::new(RefCell::new(GamePak::new()));
+        let bus = Rc::new(RefCell::new(Bus::new(gpak.clone())));
         Gba {
-            cpu: Arm7Tdmi::new(),
-            bus: Bus::new(),
+            cpu: Arm7Tdmi::new(bus.clone()),
+            bus: bus,
+            game_pak: gpak,
         }
     }
 
-    /// Loads a ROM from a file.
-    ///
-    /// Only ROMs up to 32MiB in size are valid.
-    /// Everything beyond that size will be silently
-    /// dropped.
-    ///
-    /// Unused memory is zero-filled.
-    ///
-    /// # Params
-    /// - `fp`: Path to the ROM file to load.
-    ///
-    /// # Returns
-    /// - `Ok` if loaded successfully.
-    /// - `Err` if an error occurred. The previous data might be damaged.
-    pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        self.bus.game_pak_mut().load_rom_from_file(fp)
-    }
+    /// Get an immutable reference to the GamePak.
+    pub fn game_pak(&self) -> Ref<GamePak> { self.game_pak.borrow() }
 
-    /// Get a handle for the ROM's header.
-    ///
-    /// This handle is used to query all kinds
-    /// of meta data about the currently loaded
-    /// ROM.
-    ///
-    /// # Returns
-    /// A ROM header handle.
-    pub fn rom_header<'a>(&'a self) -> GamePakRomHeader<'a> {
-        self.bus.game_pak().header()
-    }
+    /// Get a mutable reference to the GamePak.
+    pub fn game_pak_mut(&mut self) -> RefMut<GamePak> { self.game_pak.borrow_mut() }
 }
 
 

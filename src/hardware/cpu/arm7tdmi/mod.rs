@@ -6,7 +6,10 @@
 #![warn(missing_docs)]
 
 use std::u32;
+use std::cell::RefCell;
+use std::rc::Rc;
 use super::arminstruction::ArmInstruction;
+use super::super::bus::*;
 
 pub use self::exception::*;
 pub use self::cpsr::*;
@@ -41,6 +44,9 @@ pub struct Arm7Tdmi {
     state: State,
     irq_disable: bool,
     fiq_disable: bool,
+
+    // Connected devices.
+    bus: Rc<RefCell<Bus>>,
 }
 
 impl Arm7Tdmi {
@@ -64,7 +70,7 @@ impl Arm7Tdmi {
     pub const PC: usize = 15;
 
     /// Creates a new CPU where all registers are zeroed.
-    pub fn new() -> Arm7Tdmi {
+    pub fn new(bus: Rc<RefCell<Bus>>) -> Arm7Tdmi {
         Arm7Tdmi {
             gpr: [0; 16],
             cpsr: CPSR(0),
@@ -82,6 +88,8 @@ impl Arm7Tdmi {
             state: State::ARM,
             irq_disable: false,
             fiq_disable: false,
+
+            bus: bus,
         }
     }
 
