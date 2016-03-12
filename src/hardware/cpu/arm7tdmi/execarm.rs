@@ -36,6 +36,8 @@ impl Arm7Tdmi {
             ArmOpcode::MSR_Reg        => self.execute_msr_reg(inst),
             ArmOpcode::MSR_Flags      => self.execute_msr_flags(inst),
             ArmOpcode::LDR_STR        => self.execute_ldr_str(inst),
+            ArmOpcode::LDRH_STRH_Reg  => self.execute_ldrh_strh(inst, false),
+            ArmOpcode::LDRH_STRH_Imm  => self.execute_ldrh_strh(inst, true),
             _ => unimplemented!(),
         }
     }
@@ -238,6 +240,32 @@ impl Arm7Tdmi {
 
              if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
         else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
+        Ok(())
+    }
+
+    fn execute_ldrh_strh(&mut self, inst: ArmInstruction, imm: bool) -> Result<(), GbaError> {
+        let mut base = self.gpr[inst.Rn()] as u32;
+        let offs = if imm { inst.split_offset8() as u32 }
+                   else if inst.is_offset_added() { self.gpr[inst.Rm()] as u32 }
+                   else { -self.gpr[inst.Rm()] as u32 };
+        if inst.is_pre_indexed() { base = base.wrapping_add(offs); }
+
+        if inst.is_load() { match inst.ldrh_strh_op() {
+            ArmLdrhStrhOP::UH => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_halfword(base)); },
+            ArmLdrhStrhOP::SB => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_byte(base)) as u8 as i8 as i32; },
+            ArmLdrhStrhOP::SH => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_halfword(base)) as u16 as i16 as i32; },
+            _ => panic!("LDRH instead of SWP!"),
+        }}
+        else { match inst.ldrh_strh_op() {
+            ArmLdrhStrhOP::UH => { try!(self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])); },
+            ArmLdrhStrhOP::SB => { warn!("Signed store."); try!(self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])); },
+            ArmLdrhStrhOP::SH => { warn!("Signed store."); try!(self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])); },
+            _ => panic!("STRH instead of SWP!"),
+        }}
+
+             if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
+        else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
+        Ok(())
     }
 }
 

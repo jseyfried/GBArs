@@ -90,6 +90,17 @@ mod display;
 #[cfg(test)]
 mod test;
 
+///
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[allow(non_camel_case_types)]
+#[repr(u8)]
+pub enum ArmLdrhStrhOP {
+    #[doc = "Decoded LDRH/STRH instead of SWP."] InvalidSWP = 0,
+    #[doc = "Unsigned halfword load/store."]     UH = 1,
+    #[doc = "Signed byte load/store."]           SB = 2,
+    #[doc = "Signed halfword load/store"]        SH = 3,
+}
+
 /// A decoded ARM opcode.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -252,6 +263,12 @@ impl ArmInstruction {
     /// Get the data processing opcode field of the ARM instruction.
     pub fn dpop(&self) -> ArmDPOP {
         let o = ((self.raw >> 21) & 0b1111) as u8;
+        unsafe { mem::transmute(o) }
+    }
+
+    /// Get the LDRH/STRH opcode field of the ARM instruction.
+    pub fn ldrh_strh_op(&self) -> ArmLdrhStrhOP {
+        let o = ((self.raw >> 5) & 0b11) as u8;
         unsafe { mem::transmute(o) }
     }
 
