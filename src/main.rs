@@ -26,6 +26,7 @@
 extern crate log;
 extern crate argparse;
 extern crate byteorder;
+extern crate term;
 
 use argparse::{ArgumentParser, Print, Parse, ParseOption, StoreTrue, StoreFalse, StoreOption};
 use std::path::PathBuf;

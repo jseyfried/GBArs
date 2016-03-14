@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use std::cell::RefCell;
 use std::thread;
 use log::{set_logger, Log, LogMetadata, LogRecord, LogLevel, LogLevelFilter, SetLoggerError};
+use super::term;
 
 /// A logger that forwards log messages to `stdout` and a log file.
 pub struct ConsoleFileLogger {
@@ -29,6 +30,10 @@ impl Log for ConsoleFileLogger {
     #[cfg_attr(feature="clippy", allow(print_stdout))]
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
+            // Grab the terminal we want to log to.
+            // We will silently eat failures to colourise the terminal output.
+            let mut terminal = term::stdout().expect("Failed grabbing a terminal handle!");
+
             // Prepare some common message sections in case of colouring.
             let cur = thread::current();
             let tid = cur.name().unwrap_or("<?>");
@@ -43,23 +48,31 @@ impl Log for ConsoleFileLogger {
             if let Some(f) = self.file.as_ref() {
                 let tmp = f.lock().unwrap();
                 writeln!(*(tmp.borrow_mut()), "{}", msg).unwrap();
+            } else {
+                terminal.reset().unwrap_or(());
+                terminal.fg(term::color::BRIGHT_RED).unwrap_or(());
+                writeln!(terminal, "\t<No log file!>");
             }
-            else if self.colour { msg.push_str("\n\x1B[31m\x1B[1mNo log file!\x1B[0m"); }
-            else { msg.push_str("\nNo log file!"); }
 
             // Log to stdout.
             if !self.colour { println!("{}", msg); }
             else {
-                // Colourising is only done for terminals.
-                println!(
-                    "\x1B[0m\x1B[2m[TID={}]\t{}{}\x1B[0m\x1B[2m\t{}\x1B[1m\n\t\t-- {}\x1B[0m\n",
-                    tid, match record.level() {
-                        LogLevel::Error => "\x1B[31m\x1B[1m", // Bold, red.
-                        LogLevel::Warn  => "\x1B[33m\x1B[1m", // Bold, yellow.
-                        LogLevel::Info  => "\x1B[32m\x1B[1m", // Bold, green.
-                        _               => "\x1B[34m\x1B[1m", // Bold, blue.
-                    }, record.level(), loc, fmt
-                );
+                // Colourising stuff is only done for terminals.
+                terminal.reset().unwrap_or(());
+                write!(terminal, "[TID={}]\t", tid);
+                match record.level() {
+                    LogLevel::Error => terminal.fg(term::color::BRIGHT_RED).unwrap_or(()),
+                    LogLevel::Warn  => terminal.fg(term::color::BRIGHT_YELLOW).unwrap_or(()),
+                    LogLevel::Info  => terminal.fg(term::color::BRIGHT_GREEN).unwrap_or(()),
+                    _               => terminal.fg(term::color::BRIGHT_BLUE).unwrap_or(()),
+                };
+                write!(terminal, "{}\t", record.level());
+                terminal.reset().unwrap_or(());
+                writeln!(terminal, "{}", loc);
+                write!(terminal, "\t\t-- ");
+                terminal.fg(term::color::BRIGHT_WHITE).unwrap_or(());
+                writeln!(terminal, "{}\n", fmt);
+                terminal.reset().unwrap_or(());
             }
         }
     }
