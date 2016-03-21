@@ -33,6 +33,7 @@ extern crate test;
 
 use argparse::{ArgumentParser, Print, Parse, ParseOption, StoreTrue, StoreFalse, StoreOption};
 use std::path::PathBuf;
+use std::ops::Range;
 use std::process;
 
 pub mod logger;
@@ -70,6 +71,12 @@ pub struct CmdLineArgs {
     /// Disassembles a single THUMB instruction
     /// and logs the result.
     pub single_disasm_thumb: Option<String>,
+
+    /// Accepts `--dasm-bios RANGE`
+    ///
+    /// Disassembles a section of the BIOS code
+    /// area and logs the result.
+    pub disasm_bios: Option<String>,
 
     /// Accepts `-v` or `--verbose` as `true`.
     ///
@@ -114,6 +121,7 @@ impl Default for CmdLineArgs {
             log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
             single_disasm_thumb: None,
+            disasm_bios: None,
             verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
             exit: false,
@@ -166,6 +174,15 @@ fn parse_command_line(args: &mut CmdLineArgs) {
                        The instruction must be a hex number without base, e.g. 01F7, \
                        in Big Endian format, i.e. the most significant byte is left.")
           .metavar("INST");
+    parser.refer(&mut args.disasm_bios)
+          .add_option(&["--dasm-bios"], StoreOption,
+                      "Disassembles a section of the BIOS ROM. The section is defined \
+                       by a RANGE, which is a pair of hexadecimal addresses separated \
+                       by two dots `..`, e.g. `00C4..D8`. If no start address on the \
+                       left is given, e.g. `..D8`, it will be set to zero. If no end \
+                       address on the right is given, e.g. `00C4..`, it will be set to \
+                       `4000` (16KiB).")
+          .metavar("RANGE");
     parser.refer(&mut args.verbose)
           .add_option(&["-v","--verbose"], StoreTrue, "Log extra messages and information.")
           .add_option(&["-q","--quiet"], StoreFalse, "Log with less messages and information. (default)");
@@ -192,6 +209,9 @@ fn handle_oneshot_commands(args: &CmdLineArgs, gba: &hardware::Gba) {
     // Single instructions to disassemble?
     if let Some(ref x) = args.single_disasm_arm   { disasm_arm(x); }
     if let Some(ref x) = args.single_disasm_thumb { disasm_thumb(x); }
+
+    // ROM sections to disassemble?
+    if let Some(ref x) = args.disasm_bios { disasm_bios(x, gba); }
 }
 
 fn disasm_arm(x: &String) {
@@ -207,6 +227,42 @@ fn disasm_arm(x: &String) {
 fn disasm_thumb(x: &String) {
     error!("DASM THUMB: Not yet implemented!");
     // TODO implement THUMB state instructions.
+}
+
+fn disasm_bios(x: &String, gba: &hardware::Gba) {
+    use hardware::memory::Rom32;
+    use std::fmt::Write;
+    let r = if let Some(r) = parse_hex_range(x, 0, hardware::memory::BIOS_ROM_LEN as u32) { r } else { return; };
+    let bios = gba.bios();
+    let mut msg = "Disassembling BIOS ROM section:\nOffset   Data      \tInstruction\n".to_string();
+    let mut i = r.start & 0xFFFFFFFC;
+    while i < r.end {
+        let w = bios.read_word(i);
+        let e = if let Ok(inst) = hardware::cpu::ArmInstruction::decode(w) {
+            write!(msg, "{:06X} - {}\n", i, inst)
+        } else {
+            write!(msg, "{:06X} - {:08X}\n", i, w)
+        };
+        if let Err(e) = e { error!("{}", e); break; }
+        i += 4;
+    }
+    info!("{}", msg);
+}
+
+fn parse_hex_range(x: &String, default_begin: u32, default_end: u32) -> Option<Range<u32>> {
+    let mut s = x.split("..");
+    let a = if let Some(a) = s.next() { a } else { return None; };
+    let b = if let Some(b) = s.next() { b } else { return None; };
+    if let Some(_) = s.next() { return None; } // Invalid range syntax!
+    let start = if a.is_empty() { default_begin } else { match u32::from_str_radix(a, 16) {
+        Ok(i) => i,
+        Err(e) => { error!("{}", e); return None; },
+    }};
+    let end = if b.is_empty() { default_end } else { match u32::from_str_radix(b, 16) {
+        Ok(i) => i,
+        Err(e) => { error!("{}", e); return None; },
+    }};
+    Some(Range { start: start, end: end })
 }
 
 

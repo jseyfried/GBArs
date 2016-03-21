@@ -83,7 +83,7 @@ impl ArmInstruction {
             1 => "h",
             2 => "sb",
             3 => "sh",
-            _ => panic!("Opcode 00 is illegal, as it encodes other instructions. (MLA, SWP,...)"),
+            _ => { error!("Opcode 00 is illegal, as it encodes other instructions. (MLA, SWP,...)"); "<?>" },
         }
     }
 
