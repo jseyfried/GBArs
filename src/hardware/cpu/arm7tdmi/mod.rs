@@ -27,11 +27,11 @@ pub struct Arm7Tdmi {
     // Main register set.
     gpr: [i32; 16],
     cpsr: CPSR,
-    spsr: [u32; 7],
+    spsr: [CPSR; 7],
 
     // Pipeline implementation.
-    decoded: ArmInstruction,
-    fetched: u32,
+    decoded_arm: ArmInstruction,
+    fetched_arm: u32,
 
     // Register backups for mode changes.
     gpr_r8_r12_fiq: [i32; 5],
@@ -74,10 +74,10 @@ impl Arm7Tdmi {
         Arm7Tdmi {
             gpr: [0; 16],
             cpsr: CPSR(0),
-            spsr: [0; 7],
+            spsr: [CPSR(0); 7],
 
-            decoded: ArmInstruction::nop(),
-            fetched: ArmInstruction::NOP_RAW,
+            decoded_arm: ArmInstruction::nop(),
+            fetched_arm: ArmInstruction::NOP_RAW,
 
             gpr_r8_r12_fiq: [0; 5],
             gpr_r8_r12_other: [0; 5],
@@ -135,7 +135,7 @@ impl Arm7Tdmi {
         self.gpr[14] = ret_addr;
         self.gpr_r13_all[cmi] = self.gpr[13];
         self.gpr[13] = self.gpr_r13_all[nmi];
-        self.spsr[nmi] = self.cpsr.0;
+        self.spsr[nmi] = self.cpsr;
 
         // Now the banked registers R8..R12.
         if (new_mode == Mode::FIQ) ^ (self.mode == Mode::FIQ) {
@@ -159,11 +159,23 @@ impl Arm7Tdmi {
         self.fetched = ArmInstruction::NOP_RAW;
     }
 
-    fn update_flags(&mut self, x: i32, y: u64) {
-        self.cpsr.set_N(x  < 0);
-        self.cpsr.set_Z(x == 0);
-        self.cpsr.set_C((y & 0x1_00000000_u64) != 0);
-        self.cpsr.set_V( y > (u32::MAX as u64));
+    fn pipeline_step(&mut self) -> Result<(), GbaError> {
+        if self.state == State::ARM {
+            // Fetch.
+            let new_fetched_arm = try!(self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC]));
+            // Decode.
+            let new_decoded_arm = try!(ArmInstruction::decode(self.fetched_arm));
+            try!(new_decoded_arm.check_is_valid());
+            // Execute.
+            try!(self.execute_arm_state(self.decoded_arm));
+
+            // Apply new state.
+            self.fetched_arm = new_fetched_arm;
+            self.decoded_arm = new_decoded_arm;
+            self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(4);
+        } else {
+            unimplemented!()
+        }
     }
 }
 

@@ -90,7 +90,7 @@ mod display;
 #[cfg(test)]
 mod test;
 
-///
+/// A special opcode for halfword and signed data transfers.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 #[repr(u8)]
