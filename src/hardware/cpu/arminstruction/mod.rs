@@ -221,7 +221,7 @@ impl ArmInstruction {
             _ => {},
         }}
         if rm==pc { match self.op {
-            ArmOpcode::MSR_Reg | ArmOpcode::MSR_Flags | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL |
+            ArmOpcode::MSR_Reg | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL |
             ArmOpcode::LDR_STR | ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm => {
                 return Err(GbaError::InvalidUseOfR15);
             },
@@ -242,8 +242,9 @@ impl ArmInstruction {
             },
             ArmOpcode::LDM_STM => {
                 let has15 = 0 != (self.raw & 0x8000);
-                if !(self.is_load() & has15) & self.is_enforcing_user_mode() { Err(GbaError::InvalidOffsetWriteBack) }
-                else { Ok(()) }
+                if !(self.is_load() & has15) & self.is_enforcing_user_mode() & self.is_auto_incrementing() {
+                    Err(GbaError::InvalidOffsetWriteBack)
+                } else { Ok(()) }
             },
             _ => Ok(()),
         }

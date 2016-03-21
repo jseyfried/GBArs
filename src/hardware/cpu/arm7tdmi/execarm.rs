@@ -45,7 +45,6 @@ impl Arm7Tdmi {
             ArmOpcode::LDC_STC        => unimplemented!(),
             ArmOpcode::MRC_MCR        => unimplemented!(),
             ArmOpcode::Unknown        => self.execute_unknown(inst),
-            _ => unimplemented!(),
         }
     }
 
@@ -222,7 +221,7 @@ impl Arm7Tdmi {
         let op = inst.calculate_shsr_field(&self.gpr[..]) as u32;
         if inst.is_accessing_spsr() {
             if self.mode == Mode::User { error!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
-            Arm7Tdmi::override_psr_flags(&mut self.spsr[self.mode as u8 as usize], op);
+            Arm7Tdmi::override_psr_flags(&mut self.spsr[self.mode as u8 as usize].0, op);
         } else {
             Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, op);
         }
@@ -287,7 +286,7 @@ impl Arm7Tdmi {
 
         // Write back Rn now to avoid special cases with loading Rn.
         if inst.is_auto_incrementing() {
-            self.gpr[inst.Rn()] = if inst.is_offset_added() { base.wrapping_add(bytes) } else { base.wrapping_sub(bytes) };
+            self.gpr[inst.Rn()] = if inst.is_offset_added() { base.wrapping_add(bytes) as i32 } else { base.wrapping_sub(bytes) as i32 };
         }
 
         // Handle privileged transfers.
@@ -307,7 +306,8 @@ impl Arm7Tdmi {
         // Handle mode change.
         if r15 & psr & inst.is_load() {
             if self.mode == Mode::User { warn!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
-            self.change_mode(self.spsr[self.mode as u8 as usize].mode());
+            let new_mode = self.spsr[self.mode as u8 as usize].mode();
+            self.change_mode(new_mode);
         }
 
         Ok(())
@@ -317,8 +317,8 @@ impl Arm7Tdmi {
         // R0...R7 aren't banked.
         for i in 0_u32..8 { if 0 != (rmap & (1 << i)) {
             addr = addr.wrapping_add(offs.0);
-            if inst.is_load() { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
-            else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
+            if load { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
             addr = addr.wrapping_add(offs.1);
         }}
 
@@ -326,15 +326,15 @@ impl Arm7Tdmi {
         if self.mode == Mode::FIQ {
             for i in 8_u32..12 { if 0 != (rmap & (1 << i)) {
                 addr = addr.wrapping_add(offs.0);
-                if inst.is_load() { self.gpr_r8_r12_other[(i-8) as usize] = try!(self.bus.borrow().load_word(addr)); }
-                else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r8_r12_other[(i-8) as usize])); }
+                if load { self.gpr_r8_r12_other[(i-8) as usize] = try!(self.bus.borrow().load_word(addr)); }
+                else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r8_r12_other[(i-8) as usize])); }
                 addr = addr.wrapping_add(offs.1);
             }}
         } else {
             for i in 8_u32..12 { if 0 != (rmap & (1 << i)) {
                 addr = addr.wrapping_add(offs.0);
-                if inst.is_load() { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
-                else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
+                if load { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
+                else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
                 addr = addr.wrapping_add(offs.1);
             }}
         }
@@ -342,14 +342,14 @@ impl Arm7Tdmi {
         // R13..R14 is banked for everyone.
         if 0 != (rmap & 0x2000) {
             addr = addr.wrapping_add(offs.0);
-            if inst.is_load() { self.gpr_r13_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
-            else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r13_all[Mode::User as u8 as usize])); }
+            if load { self.gpr_r13_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r13_all[Mode::User as u8 as usize])); }
             addr = addr.wrapping_add(offs.1);
         }
         if 0 != (rmap & 0x4000) {
             addr = addr.wrapping_add(offs.0);
-            if inst.is_load() { self.gpr_r14_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
-            else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r14_all[Mode::User as u8 as usize])); }
+            if load { self.gpr_r14_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r14_all[Mode::User as u8 as usize])); }
             addr = addr.wrapping_add(offs.1);
         }
 
@@ -357,7 +357,7 @@ impl Arm7Tdmi {
     }
 
     fn execute_swp(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
-        let base = self.gpr[inst.Rn()];
+        let base = self.gpr[inst.Rn()] as u32;
 
         if inst.is_transfering_bytes() {
             let temp = try!(self.bus.borrow().load_byte(base));
@@ -375,12 +375,14 @@ impl Arm7Tdmi {
     fn execute_swi(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
         debug!("{}", inst);
         self.exception(Exception::SoftwareInterrupt);
+        Ok(())
     }
 
     fn execute_unknown(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
         error!("No offering to co-processors implemented yet."); // TODO
         debug!("{}", inst);
         self.exception(Exception::UndefinedInstruction);
+        Ok(())
     }
 }
 

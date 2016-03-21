@@ -10,7 +10,7 @@ use std::fmt;
 
 
 /// An error caused during GBA hardware emulation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum GbaError {
     /// An invalid ARM instruction has been decoded.
     ///

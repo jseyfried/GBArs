@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use super::arminstruction::ArmInstruction;
 use super::super::bus::*;
+use super::super::error::*;
 
 pub use self::exception::*;
 pub use self::cpsr::*;
@@ -155,27 +156,29 @@ impl Arm7Tdmi {
     }
 
     fn clear_pipeline(&mut self) {
-        self.decoded = ArmInstruction::nop();
-        self.fetched = ArmInstruction::NOP_RAW;
+        self.decoded_arm = ArmInstruction::nop();
+        self.fetched_arm = ArmInstruction::NOP_RAW;
     }
 
     fn pipeline_step(&mut self) -> Result<(), GbaError> {
         if self.state == State::ARM {
             // Fetch.
-            let new_fetched_arm = try!(self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC]));
+            let new_fetched_arm = try!(self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC] as u32)) as u32;
             // Decode.
             let new_decoded_arm = try!(ArmInstruction::decode(self.fetched_arm));
             try!(new_decoded_arm.check_is_valid());
             // Execute.
-            try!(self.execute_arm_state(self.decoded_arm));
+            let old_decoded_arm = self.decoded_arm;
+            try!(self.execute_arm_state(old_decoded_arm));
 
             // Apply new state.
             self.fetched_arm = new_fetched_arm;
             self.decoded_arm = new_decoded_arm;
             self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(4);
         } else {
-            unimplemented!()
+            unimplemented!();
         }
+        Ok(())
     }
 }
 
