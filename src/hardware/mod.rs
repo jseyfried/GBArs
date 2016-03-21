@@ -57,6 +57,12 @@ impl Gba {
 
     /// Get a mutable reference to the BIOS ROM.
     pub fn bios_mut(&mut self) -> RefMut<memory::BiosRom> { self.bios.borrow_mut() }
+
+    /// Get an immmutable reference to the ARM7TDMI CPU emulator.
+    pub fn cpu_arm7tdmi<'a>(&'a self) -> &'a Arm7Tdmi { &self.cpu }
+
+    /// Get a mutable reference to the ARM7TDMI CPU emulator.
+    pub fn cpu_arm7tdmi_mut<'a>(&'a mut self) -> &'a mut Arm7Tdmi { &mut self.cpu }
 }
 
 

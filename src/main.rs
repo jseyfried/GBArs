@@ -19,7 +19,7 @@
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
-#![feature(box_syntax, associated_consts, test)]
+#![feature(box_syntax, associated_consts)]
 #![warn(missing_docs)]
 
 #[macro_use]
@@ -92,6 +92,18 @@ pub struct CmdLineArgs {
     /// If `true`, exits after handling the command line
     /// parameters instead of entering the main program.
     pub exit: bool,
+
+    /// Accepts `-S` or `--optimise-swi` as `true`.
+    ///
+    /// Also accepts `-s` or `--emulate-swi` as `false`, which is the default value.
+    ///
+    /// If `true`, any execution of a `SWI` instruction
+    /// will first check for an optimised implementation
+    /// of BIOS functions provided by the emulator. If
+    /// such an implementation exists, this one will be
+    /// executed instead of emulating the actual BIOS
+    /// code.
+    pub optimise_swi: bool,
 }
 
 impl Default for CmdLineArgs {
@@ -105,6 +117,7 @@ impl Default for CmdLineArgs {
             verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
             exit: false,
+            optimise_swi: false,
         }
     }
 }
@@ -161,6 +174,9 @@ fn parse_command_line(args: &mut CmdLineArgs) {
           .add_option(&["-k","--without-colour"], StoreFalse, "Disable terminal logging with ANSI colour codes.");
     parser.refer(&mut args.exit)
           .add_option(&["-x","--exit"], StoreTrue, "Exit early after handling the command line arguments.");
+    parser.refer(&mut args.optimise_swi)
+          .add_option(&["-S","--optimise-swi"], StoreTrue, "Enable optimised BIOS functions.")
+          .add_option(&["-s","--emulate-swi"], StoreFalse, "Disable optimised BIOS functions. (default)");
     parser.parse_args_or_exit();
 }
 
@@ -199,6 +215,8 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
     if let Some(ref fp) = args.bios_file_path {
         if let Err(e) = gba.bios_mut().load_from_file(fp.as_path()) {
             error!("Failed loading the BIOS file:\n{}", e);
+        } else {
+            info!("Loaded the BIOS ROM from file.");
         }
     }
 
@@ -214,6 +232,9 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
             debug!("Header valid? {}", gpakh.complement_check());
         }
     }
+
+    // Configure the CPU.
+    gba.cpu_arm7tdmi_mut().set_swi_optimised(args.optimise_swi);
 }
 
 

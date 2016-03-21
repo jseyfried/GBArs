@@ -45,6 +45,7 @@ pub struct Arm7Tdmi {
     state: State,
     irq_disable: bool,
     fiq_disable: bool,
+    optimise_swi: bool,
 
     // Connected devices.
     bus: Rc<RefCell<Bus>>,
@@ -89,10 +90,21 @@ impl Arm7Tdmi {
             state: State::ARM,
             irq_disable: false,
             fiq_disable: false,
+            optimise_swi: false,
 
             bus: bus,
         }
     }
+
+    /// Checks whether optimising BIOS functions is enabled.
+    pub fn is_swi_optimised(&self) -> bool { self.optimise_swi }
+
+    /// Configures whether BIOS functions should be optimised.
+    ///
+    /// If `true`, a `SWI` instruction causes optimised functions
+    /// to be called instead of emulating the BIOS routines in
+    /// the BIOS ROM area.
+    pub fn set_swi_optimised(&mut self, optimise: bool) { self.optimise_swi = optimise; }
 
     /// Resets the CPU.
     ///

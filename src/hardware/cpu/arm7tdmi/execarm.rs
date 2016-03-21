@@ -374,8 +374,12 @@ impl Arm7Tdmi {
 
     fn execute_swi(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
         debug!("{}", inst);
-        self.exception(Exception::SoftwareInterrupt);
-        Ok(())
+        if self.optimise_swi {
+            unimplemented!()
+        } else {
+            self.exception(Exception::SoftwareInterrupt);
+            Ok(())
+        }
     }
 
     fn execute_unknown(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
