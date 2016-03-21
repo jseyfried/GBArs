@@ -44,6 +44,12 @@ pub mod hardware;
 /// Execute `GBArs -h` or `GBArs --help` to print
 /// a list of all supported command line arguments.
 pub struct CmdLineArgs {
+    /// Accepts `--bios FILE`
+    ///
+    /// The ROM file will be loaded immediately after
+    /// initialising the emulator.
+    pub bios_file_path: Option<PathBuf>,
+
     /// Accepts `--rom FILE`.
     ///
     /// The ROM file will be loaded immediately after
@@ -91,6 +97,7 @@ pub struct CmdLineArgs {
 impl Default for CmdLineArgs {
     fn default() -> CmdLineArgs {
         CmdLineArgs {
+            bios_file_path: None,
             rom_file_path: None,
             log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
@@ -125,6 +132,9 @@ fn parse_command_line(args: &mut CmdLineArgs) {
     parser.add_option(&["-V", "--version"],
                       Print(format!("GBArs v{}", env!("CARGO_PKG_VERSION"))),
                       "Show current version.");
+    parser.refer(&mut args.bios_file_path)
+          .add_option(&["--bios"], ParseOption, "Path to a BIOS file to load.")
+          .metavar("PATH");
     parser.refer(&mut args.rom_file_path)
           .add_option(&["--rom"], ParseOption, "Path to a ROM file to load.")
           .metavar("PATH");
@@ -185,16 +195,24 @@ fn disasm_thumb(x: &String) {
 
 
 fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) {
+    // If a BIOS file is given, load it into the BIOS ROM area.
+    if let Some(ref fp) = args.bios_file_path {
+        if let Err(e) = gba.bios_mut().load_from_file(fp.as_path()) {
+            error!("Failed loading the BIOS file:\n{}", e);
+        }
+    }
+
     // Load ROM now if a path is given.
     if let Some(ref fp) = args.rom_file_path {
-        if let Err(e) = gba.game_pak_mut().load_rom_from_file(fp.as_path()) {
+        let res = gba.game_pak_mut().load_rom_from_file(fp.as_path());
+        if let Err(e) = res {
             error!("Failed loading the ROM file:\n{}", e);
-            return;
+        } else {
+            let gpak  = gba.game_pak();
+            let gpakh = (*gpak).header();
+            info!("Loaded the game {}.", gpakh);
+            debug!("Header valid? {}", gpakh.complement_check());
         }
-        let gpak  = gba.game_pak();
-        let gpakh = (*gpak).header();
-        info!("Loaded the game {}.", gpakh);
-        debug!("Header valid? {}", gpakh.complement_check());
     }
 }
 

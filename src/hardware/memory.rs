@@ -6,6 +6,10 @@
 #![warn(missing_docs)]
 
 use byteorder::{ByteOrder, LittleEndian};
+use std::io;
+use std::io::Read;
+use std::fs::File;
+use std::path::Path;
 
 
 /// Address of the first byte of BIOS system ROM.
@@ -15,7 +19,7 @@ pub const BIOS_ROM_FIRST: u32 = 0x00000000;
 pub const BIOS_ROM_LAST: u32 = 0x00003FFF;
 
 /// Lenth of the BIOS system ROM area in bytes.
-pub const BIOS_ROM_LEN: u32 = (BIOS_ROM_LAST+1) - BIOS_ROM_FIRST;
+pub const BIOS_ROM_LEN: usize = ((BIOS_ROM_LAST+1) - BIOS_ROM_FIRST) as usize;
 
 /// Address of the first byte of on-board WRAM.
 pub const WRAM_ON_BOARD_FIRST: u32 = 0x02000000;
@@ -346,6 +350,49 @@ pub trait Ram32 : Rom32 {
         LittleEndian::write_u32( self.bytes_mut(offs & !0b11), data );
     }
 }
+
+
+/// Implements the BIOS ROM area.
+pub struct BiosRom(Box<[u8; BIOS_ROM_LEN]>);
+
+impl BiosRom {
+    /// Creates a new zero-filled BIOS ROM.
+    pub fn new() -> BiosRom {
+        BiosRom(box [0_u8; BIOS_ROM_LEN])
+    }
+
+    /// Loads a ROM from a file.
+    ///
+    /// Only ROMs up to 1KiB in size are valid.
+    /// Everything beyond that size will be silently
+    /// dropped.
+    ///
+    /// Unused memory is zero-filled.
+    ///
+    /// # Params
+    /// - `fp`: Path to the ROM file to load.
+    ///
+    /// # Returns
+    /// - `Ok` if loaded successfully.
+    /// - `Err` if an error occurred. The previous data might be damaged.
+    pub fn load_from_file(&mut self, fp: &Path) -> io::Result<()> {
+        // Loads a binary ROM from a given file and
+        // fills the remaining space with zero bytes.
+        trace!("Loading BIOS ROM file `{}`.", fp.display());
+        let mut file = try!(File::open(fp));
+        let rbytes = try!(file.read(&mut *self.0));
+        for i in rbytes..BIOS_ROM_LEN { self.0[i] = 0 };
+        Ok(())
+    }
+}
+
+impl RawBytes for BiosRom {
+    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] { &self.0[(offs as usize)..] }
+    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] { &mut self.0[(offs as usize)..] }
+}
+impl Rom8  for BiosRom {}
+impl Rom16 for BiosRom {}
+impl Rom32 for BiosRom {}
 
 
 /*

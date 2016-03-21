@@ -28,17 +28,20 @@ pub mod bus;
 pub struct Gba {
     cpu: Arm7Tdmi,
     bus: Rc<RefCell<Bus>>,
+    bios: Rc<RefCell<memory::BiosRom>>,
     game_pak: Rc<RefCell<GamePak>>,
 }
 
 impl Gba {
     /// Creates a new GBA emulator instance.
     pub fn new() -> Gba {
+        let bios = Rc::new(RefCell::new(memory::BiosRom::new()));
         let gpak = Rc::new(RefCell::new(GamePak::new()));
-        let bus = Rc::new(RefCell::new(Bus::new(gpak.clone())));
+        let bus = Rc::new(RefCell::new(Bus::new(gpak.clone(), bios.clone())));
         Gba {
             cpu: Arm7Tdmi::new(bus.clone()),
             bus: bus,
+            bios: bios,
             game_pak: gpak,
         }
     }
@@ -48,6 +51,12 @@ impl Gba {
 
     /// Get a mutable reference to the GamePak.
     pub fn game_pak_mut(&mut self) -> RefMut<GamePak> { self.game_pak.borrow_mut() }
+
+    /// Get an immutable reference to the BIOS ROM.
+    pub fn bios(&self) -> Ref<memory::BiosRom> { self.bios.borrow() }
+
+    /// Get a mutable reference to the BIOS ROM.
+    pub fn bios_mut(&mut self) -> RefMut<memory::BiosRom> { self.bios.borrow_mut() }
 }
 
 

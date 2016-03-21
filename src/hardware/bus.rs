@@ -16,14 +16,16 @@ use super::error::*;
 // TODO how to handle aborts?
 /// Implements the memory and bus system of the GBA.
 pub struct Bus {
+    bios_rom: Rc<RefCell<BiosRom>>,
     ioregs: IoRegisters,
     game_pak: Rc<RefCell<GamePak>>,
 }
 
 impl Bus {
     /// Creates a new memory and bus system object.
-    pub fn new(gpak: Rc<RefCell<GamePak>>) -> Bus {
+    pub fn new(gpak: Rc<RefCell<GamePak>>, bios: Rc<RefCell<BiosRom>>) -> Bus {
         Bus {
+            bios_rom: bios,
             ioregs: IoRegisters::new(),
             game_pak: gpak,
         }
@@ -50,7 +52,7 @@ impl Bus {
     /// - `Err(InvalidMemoryBusWidth)`: The memory-mapped device cannot load words.
     pub fn load_word(&self, addr: u32) -> Result<i32, GbaError> {
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_word(p) as i32),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_word(p) as i32),
@@ -81,7 +83,7 @@ impl Bus {
     /// - `Err(InvalidRomAccess)`: Tried storing data into a ROM.
     pub fn store_word(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_word(p, data as u32)),
@@ -107,7 +109,7 @@ impl Bus {
     /// - `Err(InvalidMemoryBusWidth)`: The memory-mapped device cannot load bytes.
     pub fn load_byte(&self, addr: u32) -> Result<i32, GbaError> {
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_byte(p) as u32 as i32),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_byte(p) as u32 as i32),
@@ -135,7 +137,7 @@ impl Bus {
     /// - `Err(InvalidRomAccess)`: Tried storing data into a ROM.
     pub fn store_byte(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_byte(p, (data & 0xFF) as u8)),
@@ -164,7 +166,7 @@ impl Bus {
     pub fn load_halfword(&self, addr: u32) -> Result<i32, GbaError> {
         if 0 != (addr & 0b01) { warn!("Reading missaligned halfword address {:#010X}.", addr); }
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_halfword(p) as u32 as i32),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_halfword(p) as u32 as i32),
@@ -195,7 +197,7 @@ impl Bus {
     pub fn store_halfword(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
         if 0 != (addr & 0b01) { warn!("Reading missaligned halfword address {:#010X}.", addr); }
         match PhysicalAddress::from_u32(addr) {
-            PhysicalAddress::BiosROM(p)       => unimplemented!(),
+            PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
             PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
             PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_halfword(p, (data & 0xFFFF) as u16)),
