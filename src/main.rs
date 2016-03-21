@@ -19,7 +19,7 @@
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
-#![feature(box_syntax, associated_consts)]
+#![feature(box_syntax, associated_consts, question_mark)]
 #![warn(missing_docs)]
 
 #[macro_use]
@@ -234,7 +234,7 @@ fn disasm_bios(x: &String, gba: &hardware::Gba) {
     use std::fmt::Write;
     let r = if let Some(r) = parse_hex_range(x, 0, hardware::memory::BIOS_ROM_LEN as u32) { r } else { return; };
     let bios = gba.bios();
-    let mut msg = "Disassembling BIOS ROM section:\nOffset   Data      \tInstruction\n".to_string();
+    let mut msg = "Disassembling BIOS ROM section:\n\nOffset   Data      \tInstruction\n".to_string();
     let mut i = r.start & 0xFFFFFFFC;
     while i < r.end {
         let w = bios.read_word(i);

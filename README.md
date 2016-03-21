@@ -16,6 +16,8 @@ And why GBA?
 - Integreated disassembler.
 	- Disassemble individual instructions via command line.
 	- Disassemble sections of the loaded ROM via command line.
+	- Mimics the standard ARM assembly language, although some parts of the syntax work differently. The integrated disassembler also does not support pseudo instructions like `push`/`pop`, to make the code simpler.
+- Optional optimised BIOS routines.
 - TODO
 
 # Build and Run
@@ -26,6 +28,30 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 - To generate an HTML documentation for the source code, execute `cargo doc`.
 - To build the emulator, execute `cargo build --release`.
 - To run the emulator, execute `cargo run -- ARGS...` with any command line arguments `ARGS...`. You may want to try `cargo run -- --help` to get a list of all supported command line arguments.
+
+# Examples
+
+- **Change the log file**
+			
+			GBArs --log path/to/logfile.log
+			
+- **Run a game**
+	
+	The SRAM file contains any saved data.
+			
+			GBArs --rom ./ZeroMission.gba --sram ./ZeroMission.sram
+			
+- **Disassemble an ARM state instruction**
+	
+	The instruction to disassemble must be given in big endian hexadecimal format without base.
+			
+			GBArs --dasm-arm DEADBEEF
+			
+- **Disassemble a section of the BIOS**
+	
+	Disassembles the first 128 bytes, 32 ARM state instructions. This also loads a BIOS ROM from any given file. If no such file is given, an internal default BIOS ROM will be loaded.
+			
+			GBArs --rom ./GbaBios.gba --dasm-bios 0..80
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**
@@ -46,7 +72,16 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 	> Disassembly in the cloud.
 
-	As the name states: A website disassembling your binaries. Just copy and paste sections of your ROM files and have fun. Note that the GBA works in Little Endian mode.
+	As the name states: A website disassembling your binaries. Just copy and paste sections of your ROM files and have fun. To use it, apply the following settings:
+	
+	- **Arch**: ARMv4T (T = THUMB support)
+	- **Endian**: Little
+	- **Force THUMB Mode**: Default (Might need to toggle in case the disassembly is wrong.)
+	- **Register Names**: reg-names-std (Just a matter of taste.)
+	
+	A hint on how you recognise whether the website erroneously disassembles ARM instructions as THUMB instructions: The first instruction of a BIOS or GamePak ROM file is almost always an unconditional ARM state branch like `b loc_00000058`.
+	
+	Also note that ARMv4 is just the "instruction set version". Although the GBA's CPU is an ARM7TDMI (again, T = THUMB), its instruction set is ARMv4.
 - **[ARM7TDMI Technical Reference Manual](http://www.atmel.com/Images/ddi0029g_7tdmi_r3_trm.pdf)**
 	
 	> This document is Open Access. This document has no restriction on distribution.
@@ -64,7 +99,7 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 	> Livecoding a Nintendo 64 emulator in Rust :D
 
-	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams.
+	This project inspired me to make this emulator. [Here](https://www.youtube.com/channel/UC4mpLlHn0FOekNg05yCnkzQ/videos) is a YouTube channel containing recordings of Ferris' Rustendo64 streams. You'll find stuff like the GitHub repository link in the video descriptions.
 - **[ProblemKaputt.de - GBATEK](http://problemkaputt.de/gbatek.htm)**
 
 	> GBATEK written 2001-2014 by Martin Korth, programming specs for the GBA and NDS hardware
