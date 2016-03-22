@@ -208,7 +208,7 @@ impl GamePakRom {
         // Loads a binary ROM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading ROM file `{}`.", fp.display());
-        let rbytes = File::open(fp)?.read(&mut *self.raw_bytes)?;
+        let rbytes = try!(try!(File::open(fp)).read(&mut *self.raw_bytes));
         for i in rbytes..MAX_GBA_ROM_SIZE { self.raw_bytes[i] = 0 };
         self.loaded_rom_len = rbytes;
 
@@ -273,7 +273,7 @@ impl GamePakSram {
         // Loads a binary SRAM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading SRAM file `{}`.", fp.display());
-        let rbytes = File::open(fp)?.read(&mut *self.0)?;
+        let rbytes = try!(try!(File::open(fp)).read(&mut *self.0));
         for i in rbytes..MAX_GBA_ROM_SIZE { self.0[i] = 0 };
         Ok(())
     }

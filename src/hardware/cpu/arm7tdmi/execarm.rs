@@ -23,7 +23,7 @@ impl Arm7Tdmi {
     /// - `Err` if trying to execute an ill-formed instruction.
     pub fn execute_arm_state(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         // TODO do research on when to flush the pipeline due to R15-writes
-        let do_exec = inst.condition().check(&self.cpsr)?;
+        let do_exec = try!(inst.condition().check(&self.cpsr));
         if !do_exec { return Ok(CpuAction::None); }
 
         match inst.opcode() {
@@ -237,11 +237,11 @@ impl Arm7Tdmi {
         if inst.is_pre_indexed() { base = base.wrapping_add(offs); }
 
         if inst.is_load() { // FIXME Rd_usr if post indexing and W-bit?
-            if inst.is_transfering_bytes() { self.gpr[inst.Rd()] = self.bus.borrow().load_byte(base)?; }
-            else                           { self.gpr[inst.Rd()] = self.bus.borrow().load_word(base)?; }
+            if inst.is_transfering_bytes() { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_byte(base)); }
+            else                           { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_word(base)); }
         } else {
-            if inst.is_transfering_bytes() { self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])?; }
-            else                           { self.bus.borrow_mut().store_word(base, self.gpr[inst.Rd()])?; }
+            if inst.is_transfering_bytes() { try!(self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])); }
+            else                           { try!(self.bus.borrow_mut().store_word(base, self.gpr[inst.Rd()])); }
         }
 
              if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
@@ -257,15 +257,15 @@ impl Arm7Tdmi {
         if inst.is_pre_indexed() { base = base.wrapping_add(offs); }
 
         if inst.is_load() { match inst.ldrh_strh_op() {
-            ArmLdrhStrhOP::UH => { self.gpr[inst.Rd()] = self.bus.borrow().load_halfword(base)?; },
-            ArmLdrhStrhOP::SB => { self.gpr[inst.Rd()] = self.bus.borrow().load_byte(base)? as u8 as i8 as i32; },
-            ArmLdrhStrhOP::SH => { self.gpr[inst.Rd()] = self.bus.borrow().load_halfword(base)? as u16 as i16 as i32; },
+            ArmLdrhStrhOP::UH => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_halfword(base)); },
+            ArmLdrhStrhOP::SB => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_byte(base)) as u8 as i8 as i32; },
+            ArmLdrhStrhOP::SH => { self.gpr[inst.Rd()] = try!(self.bus.borrow().load_halfword(base)) as u16 as i16 as i32; },
             _ => panic!("LDRH instead of SWP!"),
         }}
         else { match inst.ldrh_strh_op() {
-            ArmLdrhStrhOP::UH => { self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])?; },
-            ArmLdrhStrhOP::SB => { warn!("Signed store."); self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])?; },
-            ArmLdrhStrhOP::SH => { warn!("Signed store."); self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])?; },
+            ArmLdrhStrhOP::UH => { try!(self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])); },
+            ArmLdrhStrhOP::SB => { warn!("Signed store."); try!(self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rd()])); },
+            ArmLdrhStrhOP::SH => { warn!("Signed store."); try!(self.bus.borrow_mut().store_halfword(base, self.gpr[inst.Rd()])); },
             _ => panic!("STRH instead of SWP!"),
         }}
 
@@ -292,13 +292,13 @@ impl Arm7Tdmi {
         // Handle privileged transfers.
         if psr & !(r15 & inst.is_load()) {
             if self.mode == Mode::User { return Err(GbaError::PrivilegedUserCode); }
-            self.execute_ldm_stm_user_bank(rmap, addr, offs, inst.is_load())?;
+            try!(self.execute_ldm_stm_user_bank(rmap, addr, offs, inst.is_load()));
             if inst.is_auto_incrementing() { warn!("W-bit set for LDM/STM with PSR transfer/USR banks."); }
         } else {
             for i in 0_u32..16 { if 0 != (rmap & (1 << i)) {
                 addr = addr.wrapping_add(offs.0);
-                if inst.is_load() { self.gpr[i as usize] = self.bus.borrow().load_word(addr)?; }
-                else              { self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])?; }
+                if inst.is_load() { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
+                else              { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
                 addr = addr.wrapping_add(offs.1);
             }}
         }
@@ -317,8 +317,8 @@ impl Arm7Tdmi {
         // R0...R7 aren't banked.
         for i in 0_u32..8 { if 0 != (rmap & (1 << i)) {
             addr = addr.wrapping_add(offs.0);
-            if load { self.gpr[i as usize] = self.bus.borrow().load_word(addr)?; }
-            else    { self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])?; }
+            if load { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
             addr = addr.wrapping_add(offs.1);
         }}
 
@@ -326,15 +326,15 @@ impl Arm7Tdmi {
         if self.mode == Mode::FIQ {
             for i in 8_u32..12 { if 0 != (rmap & (1 << i)) {
                 addr = addr.wrapping_add(offs.0);
-                if load { self.gpr_r8_r12_other[(i-8) as usize] = self.bus.borrow().load_word(addr)?; }
-                else    { self.bus.borrow_mut().store_word(addr, self.gpr_r8_r12_other[(i-8) as usize])?; }
+                if load { self.gpr_r8_r12_other[(i-8) as usize] = try!(self.bus.borrow().load_word(addr)); }
+                else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r8_r12_other[(i-8) as usize])); }
                 addr = addr.wrapping_add(offs.1);
             }}
         } else {
             for i in 8_u32..12 { if 0 != (rmap & (1 << i)) {
                 addr = addr.wrapping_add(offs.0);
-                if load { self.gpr[i as usize] = self.bus.borrow().load_word(addr)?; }
-                else    { self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])?; }
+                if load { self.gpr[i as usize] = try!(self.bus.borrow().load_word(addr)); }
+                else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr[i as usize])); }
                 addr = addr.wrapping_add(offs.1);
             }}
         }
@@ -342,14 +342,14 @@ impl Arm7Tdmi {
         // R13..R14 is banked for everyone.
         if 0 != (rmap & 0x2000) {
             addr = addr.wrapping_add(offs.0);
-            if load { self.gpr_r13_all[Mode::User as u8 as usize] = self.bus.borrow().load_word(addr)?; }
-            else    { self.bus.borrow_mut().store_word(addr, self.gpr_r13_all[Mode::User as u8 as usize])?; }
+            if load { self.gpr_r13_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r13_all[Mode::User as u8 as usize])); }
             addr = addr.wrapping_add(offs.1);
         }
         if 0 != (rmap & 0x4000) {
             addr = addr.wrapping_add(offs.0);
-            if load { self.gpr_r14_all[Mode::User as u8 as usize] = self.bus.borrow().load_word(addr)?; }
-            else    { self.bus.borrow_mut().store_word(addr, self.gpr_r14_all[Mode::User as u8 as usize])?; }
+            if load { self.gpr_r14_all[Mode::User as u8 as usize] = try!(self.bus.borrow().load_word(addr)); }
+            else    { try!(self.bus.borrow_mut().store_word(addr, self.gpr_r14_all[Mode::User as u8 as usize])); }
         }
 
         Ok(CpuAction::None)
@@ -359,12 +359,12 @@ impl Arm7Tdmi {
         let base = self.gpr[inst.Rn()] as u32;
 
         if inst.is_transfering_bytes() {
-            let temp = self.bus.borrow().load_byte(base)?;
-            self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rm()])?;
+            let temp = try!(self.bus.borrow().load_byte(base));
+            try!(self.bus.borrow_mut().store_byte(base, self.gpr[inst.Rm()]));
             self.gpr[inst.Rd()] = temp;
         } else {
-            let temp = self.bus.borrow().load_word(base)?;
-            self.bus.borrow_mut().store_word(base, self.gpr[inst.Rm()])?;
+            let temp = try!(self.bus.borrow().load_word(base));
+            try!(self.bus.borrow_mut().store_word(base, self.gpr[inst.Rm()]));
             self.gpr[inst.Rd()] = temp;
         }
 

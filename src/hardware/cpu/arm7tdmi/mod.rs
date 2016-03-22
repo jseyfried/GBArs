@@ -206,13 +206,13 @@ impl Arm7Tdmi {
 
         let action: CpuAction = if self.state == State::ARM {
             // Fetch.
-            let new_fetched_arm = self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC] as u32)? as u32;
+            let new_fetched_arm = try!(self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC] as u32)) as u32;
             // Decode.
-            let new_decoded_arm = ArmInstruction::decode(self.fetched_arm)?;
-            new_decoded_arm.check_is_valid()?;
+            let new_decoded_arm = try!(ArmInstruction::decode(self.fetched_arm));
+            try!(new_decoded_arm.check_is_valid());
             // Execute.
             let old_decoded_arm = self.decoded_arm;
-            let action = self.execute_arm_state(old_decoded_arm)?;
+            let action = try!(self.execute_arm_state(old_decoded_arm));
 
             // Apply new state.
             self.fetched_arm = new_fetched_arm;
