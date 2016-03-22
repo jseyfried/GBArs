@@ -111,6 +111,13 @@ pub struct CmdLineArgs {
     /// executed instead of emulating the actual BIOS
     /// code.
     pub optimise_swi: bool,
+
+    /// Accepts `-l` or `--load-sram` as `true`.
+    ///
+    /// If `true`, the `--rom` flag must be given. GBArs
+    /// will find a corresponding SRAM file to load by
+    /// changing the file extension.
+    pub load_sram: bool,
 }
 
 impl Default for CmdLineArgs {
@@ -122,10 +129,11 @@ impl Default for CmdLineArgs {
             single_disasm_arm: None,
             single_disasm_thumb: None,
             disasm_bios: None,
-            verbose: cfg!(debug_assertions), // Default to `true` while testing.
+            verbose: cfg!(test), // Default to `true` while testing.
             colour: true,
             exit: false,
             optimise_swi: false,
+            load_sram: false,
         }
     }
 }
@@ -194,6 +202,8 @@ fn parse_command_line(args: &mut CmdLineArgs) {
     parser.refer(&mut args.optimise_swi)
           .add_option(&["-S","--optimise-swi"], StoreTrue, "Enable optimised BIOS functions.")
           .add_option(&["-s","--emulate-swi"], StoreFalse, "Disable optimised BIOS functions. (default)");
+    parser.refer(&mut args.load_sram)
+          .add_option(&["-l", "--load-sram"], StoreTrue, "Tries loading an SRAM file corresponding to a given `--rom`.");
     parser.parse_args_or_exit();
 }
 
@@ -225,7 +235,7 @@ fn disasm_arm(x: &String) {
 }
 
 fn disasm_thumb(x: &String) {
-    error!("DASM THUMB: Not yet implemented!");
+    error!("DASM THUMB: Not yet implemented!\n{}", x);
     // TODO implement THUMB state instructions.
 }
 
@@ -278,14 +288,24 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
 
     // Load ROM now if a path is given.
     if let Some(ref fp) = args.rom_file_path {
-        let res = gba.game_pak_mut().load_rom_from_file(fp.as_path());
+        let res = gba.game_pak_mut().rom_mut().load_from_file(fp.as_path());
         if let Err(e) = res {
-            error!("Failed loading the ROM file:\n{}", e);
+            error!("Failed loading the GamePak ROM file:\n{}", e);
         } else {
-            let gpak  = gba.game_pak();
-            let gpakh = (*gpak).header();
-            info!("Loaded the game {}.", gpakh);
-            debug!("Header valid? {}", gpakh.complement_check());
+            info!("Loaded the game {}.", gba.game_pak().header());
+            debug!("Header valid? {}", gba.game_pak().header().complement_check());
+            // Load SRAM if desired.
+            if args.load_sram {
+                let fp   = fp.with_extension("sram");
+                let path = fp.as_path();
+                let res  = gba.game_pak_mut().sram_mut().load_from_file(path);
+                if let Err(e) = res {
+                    error!("Failed loading the GamePak SRAM file:\n{}", e);
+                    gba.game_pak_mut().sram_mut().clear(); // Data might be broken.
+                } else {
+                    info!("Loaded the SRAM file `{}`.", path.display());
+                }
+            }
         }
     }
 

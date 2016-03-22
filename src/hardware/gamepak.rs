@@ -255,18 +255,36 @@ impl GamePakSram {
     pub fn clear(&mut self) {
         for i in 0..(GAME_PAK_SRAM_LEN as usize) { (*self.0)[i] = 0 };
     }
+
+    /// Loads a SRAM from a file.
+    ///
+    /// Only SRAMs up to 64KiB in size are valid.
+    /// Everything beyond that size will be silently
+    /// dropped.
+    ///
+    /// Unused memory is zero-filled.
+    ///
+    /// # Params
+    /// - `fp`: Path to the SRAM file to load.
+    ///
+    /// # Returns
+    /// - `Ok` if loaded successfully.
+    /// - `Err` if an error occurred. The previous data might be damaged.
+    pub fn load_from_file(&mut self, fp: &Path) -> io::Result<()> {
+        // Loads a binary SRAM from a given file and
+        // fills the remaining space with zero bytes.
+        trace!("Loading SRAM file `{}`.", fp.display());
+        let mut file = try!(File::open(fp));
+        let rbytes = try!(file.read(&mut *self.0));
+        for i in rbytes..MAX_GBA_ROM_SIZE { self.0[i] = 0 };
+        Ok(())
+    }
 }
 
 impl RawBytes for GamePakSram {
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] {
-        &(*self.0)[(offs as usize)..]
-    }
-
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] {
-        &mut (*self.0)[(offs as usize)..]
-    }
+    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] { &(*self.0)[(offs as usize)..] }
+    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] { &mut (*self.0)[(offs as usize)..] }
 }
-
 impl Rom8 for GamePakSram {}
 impl Ram8 for GamePakSram {}
 
