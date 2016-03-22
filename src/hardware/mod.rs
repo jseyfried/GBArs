@@ -27,7 +27,6 @@ pub mod bus;
 /// what not.
 pub struct Gba {
     cpu: Arm7Tdmi,
-    bus: Rc<RefCell<Bus>>,
     bios: Rc<RefCell<memory::BiosRom>>,
     game_pak: Rc<RefCell<GamePak>>,
 }
@@ -40,7 +39,6 @@ impl Gba {
         let bus = Rc::new(RefCell::new(Bus::new(gpak.clone(), bios.clone())));
         Gba {
             cpu: Arm7Tdmi::new(bus.clone()),
-            bus: bus,
             bios: bios,
             game_pak: gpak,
         }

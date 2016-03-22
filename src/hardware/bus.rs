@@ -53,16 +53,16 @@ impl Bus {
     pub fn load_word(&self, addr: u32) -> Result<i32, GbaError> {
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_word(p) as i32),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_word(p) as i32),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Err(GbaError::InvalidMemoryBusWidth(p, 32)),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }
@@ -84,16 +84,16 @@ impl Bus {
     pub fn store_word(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_word(p, data as u32)),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Err(GbaError::InvalidMemoryBusWidth(p, 32)),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }
@@ -110,16 +110,16 @@ impl Bus {
     pub fn load_byte(&self, addr: u32) -> Result<i32, GbaError> {
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_byte(p) as u32 as i32),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_byte(p) as u32 as i32),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Ok(self.game_pak.borrow().sram().read_byte(p) as u32 as i32),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }
@@ -136,18 +136,19 @@ impl Bus {
     /// - `Err(InvalidMemoryBusWidth)`: The memory-mapped device cannot store bytes.
     /// - `Err(InvalidRomAccess)`: Tried storing data into a ROM.
     pub fn store_byte(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
+        let byte = (data & 0xFF) as u8;
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
-            PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_byte(p, (data & 0xFF) as u8)),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
+            PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_byte(p, byte)),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Ok(self.game_pak.borrow_mut().sram_mut().write_byte(p, byte)),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }
@@ -167,16 +168,16 @@ impl Bus {
         if 0 != (addr & 0b01) { warn!("Reading missaligned halfword address {:#010X}.", addr); }
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Ok(self.bios_rom.borrow().read_halfword(p) as u32 as i32),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
             PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.read_halfword(p) as u32 as i32),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Err(GbaError::InvalidMemoryBusWidth(p, 16)),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }
@@ -196,18 +197,19 @@ impl Bus {
     /// - `Err(InvalidRomAccess)`: Tried storing data into a ROM.
     pub fn store_halfword(&mut self, addr: u32, data: i32) -> Result<(), GbaError> {
         if 0 != (addr & 0b01) { warn!("Reading missaligned halfword address {:#010X}.", addr); }
+        let halfword = (data & 0xFFFF) as u16;
         match PhysicalAddress::from_u32(addr) {
             PhysicalAddress::BiosROM(p)       => Err(GbaError::InvalidRomAccess(p)),
-            PhysicalAddress::OnBoardWRAM(p)   => unimplemented!(),
-            PhysicalAddress::OnChipWRAM(p)    => unimplemented!(),
-            PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_halfword(p, (data & 0xFFFF) as u16)),
-            PhysicalAddress::PaletteRAM(p)    => unimplemented!(),
-            PhysicalAddress::VRAM(p)          => unimplemented!(),
-            PhysicalAddress::AttributesOBJ(p) => unimplemented!(),
-            PhysicalAddress::GamePak0ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak1ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePak2ROM(p)   => unimplemented!(),
-            PhysicalAddress::GamePakSRAM(p)   => unimplemented!(),
+            PhysicalAddress::OnBoardWRAM(_)   => unimplemented!(),
+            PhysicalAddress::OnChipWRAM(_)    => unimplemented!(),
+            PhysicalAddress::RegistersIO(p)   => Ok(self.ioregs.write_halfword(p, halfword)),
+            PhysicalAddress::PaletteRAM(_)    => unimplemented!(),
+            PhysicalAddress::VRAM(_)          => unimplemented!(),
+            PhysicalAddress::AttributesOBJ(_) => unimplemented!(),
+            PhysicalAddress::GamePak0ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak1ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePak2ROM(_)   => unimplemented!(),
+            PhysicalAddress::GamePakSRAM(p)   => Err(GbaError::InvalidMemoryBusWidth(p, 16)),
             PhysicalAddress::Invalid(p)       => Err(GbaError::InvalidPhysicalAddress(p)),
         }
     }

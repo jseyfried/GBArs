@@ -21,10 +21,10 @@ impl Arm7Tdmi {
     /// # Returns
     /// - `Ok` if executing the instruction succeeded.
     /// - `Err` if trying to execute an ill-formed instruction.
-    #[allow(dead_code)] // TODO delete this
-    pub fn execute_arm_state(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    pub fn execute_arm_state(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
+        // TODO do research on when to flush the pipeline due to R15-writes
         let do_exec = inst.condition().check(&self.cpsr)?;
-        if !do_exec { return Ok(()); }
+        if !do_exec { return Ok(CpuAction::None); }
 
         match inst.opcode() {
             ArmOpcode::BX             => self.execute_bx(inst),
@@ -48,7 +48,7 @@ impl Arm7Tdmi {
         }
     }
 
-    fn execute_bx(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_bx(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let rm = inst.Rm();
         if rm == Arm7Tdmi::PC { warn!("Executing `bx PC`!"); }
         let addr = self.gpr[rm] as u32;
@@ -56,34 +56,34 @@ impl Arm7Tdmi {
         self.cpsr.set_state(self.state);
         self.gpr[15] = (addr & 0xFFFFFFFE) as i32;
         // FIXME missaligned PC in ARM state?
-        Ok(())
+        Ok(CpuAction::FlushPipeline)
     }
 
-    fn execute_b_bl(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_b_bl(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         if inst.is_branch_with_link() { self.gpr[14] = self.gpr[15].wrapping_sub(4); }
         self.gpr[15] = self.gpr[15].wrapping_add(inst.branch_offset());
-        Ok(())
+        Ok(CpuAction::FlushPipeline)
     }
 
-    fn execute_mul_mla(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_mul_mla(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         if inst.is_setting_flags() { return self.execute_mul_mla_s(inst); }
         let mut res = self.gpr[inst.Rs()].wrapping_mul(self.gpr[inst.Rm()]);
         if inst.is_accumulating() { res = res.wrapping_add(self.gpr[inst.Rd()]); }
         self.gpr[inst.Rn()] = res;
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_mul_mla_s(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_mul_mla_s(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let mut x = self.gpr[inst.Rs()].wrapping_mul(self.gpr[inst.Rm()]);
         if inst.is_accumulating() { x = x.wrapping_add(self.gpr[inst.Rd()]); }
         self.gpr[inst.Rn()] = x;
         self.cpsr.set_N(x < 0);
         self.cpsr.set_Z(x == 0);
         self.cpsr.set_C(false); // "some meaningless value"
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_mull_mlal(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_mull_mlal(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let mut res: u64 = if inst.is_signed() {
             (self.gpr[inst.Rs()] as i64).wrapping_mul(self.gpr[inst.Rm()] as i64) as u64
         } else {
@@ -102,10 +102,10 @@ impl Arm7Tdmi {
             self.cpsr.set_V(false); // "some meaningless value"
         }
 
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_data_processing(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_data_processing(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         if inst.is_setting_flags() { return self.execute_data_processing_s(inst); }
         let op2: i32 = inst.calculate_shft_field(&self.gpr[..], self.cpsr.C());
         let rn: i32 = self.gpr[inst.Rn()];
@@ -130,10 +130,10 @@ impl Arm7Tdmi {
             ArmDPOP::MVN => { !op2 },
         };
 
-        Ok(())
+        Ok(if inst.Rd() == Arm7Tdmi::PC { CpuAction::FlushPipeline } else { CpuAction::None })
     }
 
-    fn execute_data_processing_s(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_data_processing_s(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let (op2, cshft) = inst.calculate_shft_field_with_carry(&self.gpr[..], self.cpsr.C());
         let rn = self.gpr[inst.Rn()];
         let c = if self.cpsr.C() { 1 } else { 0 }; // TODO cshft or CPSR.C?
@@ -170,7 +170,7 @@ impl Arm7Tdmi {
         }
 
         if !op.is_test() { self.gpr[inst.Rd()] = rd; }
-        Ok(())
+        Ok(if inst.Rd() == Arm7Tdmi::PC { CpuAction::FlushPipeline } else { CpuAction::None })
     }
     fn add_carry_overflow(a: i32, b: i32, c: &mut bool, v: &mut bool) -> i32 {
         let res64: u64 = (a as u32 as u64).wrapping_add(b as u32 as u64);
@@ -187,17 +187,17 @@ impl Arm7Tdmi {
         x.0
     }
 
-    fn execute_mrs(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_mrs(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         self.gpr[inst.Rd()] = if inst.is_accessing_spsr() {
             if self.mode == Mode::User { error!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
             self.spsr[self.mode as u8 as usize].0 as i32
         } else {
             self.cpsr.0 as i32
         };
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_msr_reg(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_msr_reg(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let rm = self.gpr[inst.Rm()] as u32;
         if self.mode == Mode::User {
             // User mode can only set the flag bits of CPSR.
@@ -214,10 +214,10 @@ impl Arm7Tdmi {
             let old_mode = self.cpsr.mode();
             self.change_mode(old_mode);
         }
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_msr_flags(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_msr_flags(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let op = inst.calculate_shsr_field(&self.gpr[..]) as u32;
         if inst.is_accessing_spsr() {
             if self.mode == Mode::User { error!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
@@ -225,13 +225,13 @@ impl Arm7Tdmi {
         } else {
             Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, op);
         }
-        Ok(())
+        Ok(CpuAction::None)
     }
 
     fn override_psr(psr: &mut u32, val: u32) { *psr = (val & CPSR::NON_RESERVED_MASK) | (*psr & !CPSR::NON_RESERVED_MASK); }
     fn override_psr_flags(cpsr: &mut u32, val: u32) { *cpsr = (val & CPSR::FLAGS_MASK) | (*cpsr & !CPSR::FLAGS_MASK); }
 
-    fn execute_ldr_str(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_ldr_str(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let mut base = self.gpr[inst.Rn()] as u32;
         let offs = inst.shifted_offset(&self.gpr[..], self.cpsr.C()) as u32;
         if inst.is_pre_indexed() { base = base.wrapping_add(offs); }
@@ -246,10 +246,10 @@ impl Arm7Tdmi {
 
              if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
         else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_ldrh_strh(&mut self, inst: ArmInstruction, imm: bool) -> Result<(), GbaError> {
+    fn execute_ldrh_strh(&mut self, inst: ArmInstruction, imm: bool) -> Result<CpuAction, GbaError> {
         let mut base = self.gpr[inst.Rn()] as u32;
         let offs = if imm { inst.split_offset8() as u32 }
                    else if inst.is_offset_added() { self.gpr[inst.Rm()] as u32 }
@@ -271,10 +271,10 @@ impl Arm7Tdmi {
 
              if !inst.is_pre_indexed()       { self.gpr[inst.Rn()] = base.wrapping_add(offs) as i32; }
         else if  inst.is_auto_incrementing() { self.gpr[inst.Rn()] = base as i32; }
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_ldm_stm(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_ldm_stm(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         // TODO Handle store/load base as first or later register.
         let base  = self.gpr[inst.Rn()] as u32;
         let rmap  = inst.register_map();
@@ -310,10 +310,10 @@ impl Arm7Tdmi {
             self.change_mode(new_mode);
         }
 
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_ldm_stm_user_bank(&mut self, rmap: u16, mut addr: u32, offs: (u32, u32), load: bool) -> Result<(), GbaError> {
+    fn execute_ldm_stm_user_bank(&mut self, rmap: u16, mut addr: u32, offs: (u32, u32), load: bool) -> Result<CpuAction, GbaError> {
         // R0...R7 aren't banked.
         for i in 0_u32..8 { if 0 != (rmap & (1 << i)) {
             addr = addr.wrapping_add(offs.0);
@@ -352,10 +352,10 @@ impl Arm7Tdmi {
             else    { self.bus.borrow_mut().store_word(addr, self.gpr_r14_all[Mode::User as u8 as usize])?; }
         }
 
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_swp(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_swp(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let base = self.gpr[inst.Rn()] as u32;
 
         if inst.is_transfering_bytes() {
@@ -368,24 +368,24 @@ impl Arm7Tdmi {
             self.gpr[inst.Rd()] = temp;
         }
 
-        Ok(())
+        Ok(CpuAction::None)
     }
 
-    fn execute_swi(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_swi(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         debug!("{}", inst);
         if self.optimise_swi {
             unimplemented!()
         } else {
             self.exception(Exception::SoftwareInterrupt);
-            Ok(())
+            Ok(CpuAction::FlushPipeline)
         }
     }
 
-    fn execute_unknown(&mut self, inst: ArmInstruction) -> Result<(), GbaError> {
+    fn execute_unknown(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         error!("No offering to co-processors implemented yet."); // TODO
         debug!("{}", inst);
         self.exception(Exception::UndefinedInstruction);
-        Ok(())
+        Ok(CpuAction::None)
     }
 }
 

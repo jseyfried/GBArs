@@ -51,7 +51,7 @@ impl Log for ConsoleFileLogger {
             } else {
                 terminal.reset().unwrap_or(());
                 terminal.fg(term::color::BRIGHT_RED).unwrap_or(());
-                writeln!(terminal, "\t<No log file!>");
+                writeln!(terminal, "\t<No log file!>").unwrap();
             }
 
             // Log to stdout.
@@ -59,19 +59,19 @@ impl Log for ConsoleFileLogger {
             else {
                 // Colourising stuff is only done for terminals.
                 terminal.reset().unwrap_or(());
-                write!(terminal, "[TID={}]\t", tid);
+                write!(terminal, "[TID={}]\t", tid).unwrap();
                 match record.level() {
                     LogLevel::Error => terminal.fg(term::color::BRIGHT_RED).unwrap_or(()),
                     LogLevel::Warn  => terminal.fg(term::color::BRIGHT_YELLOW).unwrap_or(()),
                     LogLevel::Info  => terminal.fg(term::color::BRIGHT_GREEN).unwrap_or(()),
                     _               => terminal.fg(term::color::BRIGHT_BLUE).unwrap_or(()),
                 };
-                write!(terminal, "{}\t", record.level());
+                write!(terminal, "{}\t", record.level()).unwrap();
                 terminal.reset().unwrap_or(());
-                writeln!(terminal, "{}", loc);
-                write!(terminal, "\t\t-- ");
+                writeln!(terminal, "{}", loc).unwrap();
+                write!(terminal, "\t\t-- ").unwrap();
                 terminal.fg(term::color::BRIGHT_WHITE).unwrap_or(());
-                writeln!(terminal, "{}\n", fmt);
+                writeln!(terminal, "{}\n", fmt).unwrap();
                 terminal.reset().unwrap_or(());
             }
         }

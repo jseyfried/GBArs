@@ -5,7 +5,6 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use std::u32;
 use std::cell::RefCell;
 use std::rc::Rc;
 use super::arminstruction::ArmInstruction;
@@ -22,6 +21,12 @@ pub mod cpsr;
 pub mod armcondition;
 
 mod execarm;
+
+/// Decides what the CPU should do after executing an instruction.
+pub enum CpuAction {
+    #[doc = "Continue execution normally."]                         None,
+    #[doc = "PC has changed, don't modify it, flush the pipeline."] FlushPipeline,
+}
 
 /// Implements the logic needed to emulate an ARM7TDMI CPU.
 pub struct Arm7Tdmi {
@@ -46,6 +51,7 @@ pub struct Arm7Tdmi {
     irq_disable: bool,
     fiq_disable: bool,
     optimise_swi: bool,
+    delay_cycles: u8,
 
     // Connected devices.
     bus: Rc<RefCell<Bus>>,
@@ -91,6 +97,7 @@ impl Arm7Tdmi {
             irq_disable: false,
             fiq_disable: false,
             optimise_swi: false,
+            delay_cycles: 0,
 
             bus: bus,
         }
@@ -167,13 +174,37 @@ impl Arm7Tdmi {
         self.mode = new_mode;
     }
 
-    fn clear_pipeline(&mut self) {
+    fn flush_pipeline(&mut self) {
         self.decoded_arm = ArmInstruction::nop();
         self.fetched_arm = ArmInstruction::NOP_RAW;
+        // TODO thumb
     }
 
-    fn pipeline_step(&mut self) -> Result<(), GbaError> {
-        if self.state == State::ARM {
+    #[inline(always)]
+    fn increment_pc(&mut self) {
+        self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(if self.state == State::ARM { 4 } else { 2 });
+    }
+
+    /// Executes a single pipeline step.
+    ///
+    /// The ARM7TDMI basically has three pipeline stages:
+    ///
+    /// 1. Fetch the next instruction and increment PC.
+    /// 2. Decode the previously fetched instruction.
+    /// 3. Execute the previously decoded instruction.
+    ///
+    /// This function also handles pipeline flushing and
+    /// ARM/THUMB state changes. A pipeline flush just
+    /// fills all pipeline stages with pseudo NOP
+    /// instructions, i.e. instructions without any (side)
+    /// effects.
+    pub fn pipeline_step(&mut self) -> Result<(), GbaError> {
+        if self.delay_cycles > 0 {
+            self.delay_cycles -= 1;
+            return Ok(());
+        }
+
+        let action: CpuAction = if self.state == State::ARM {
             // Fetch.
             let new_fetched_arm = self.bus.borrow().load_word(self.gpr[Arm7Tdmi::PC] as u32)? as u32;
             // Decode.
@@ -181,15 +212,22 @@ impl Arm7Tdmi {
             new_decoded_arm.check_is_valid()?;
             // Execute.
             let old_decoded_arm = self.decoded_arm;
-            self.execute_arm_state(old_decoded_arm)?;
+            let action = self.execute_arm_state(old_decoded_arm)?;
 
             // Apply new state.
             self.fetched_arm = new_fetched_arm;
             self.decoded_arm = new_decoded_arm;
-            self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(4);
+
+            action
         } else {
             unimplemented!();
+        };
+
+        match action {
+            CpuAction::None          => self.increment_pc(),
+            CpuAction::FlushPipeline => self.flush_pipeline(),
         }
+
         Ok(())
     }
 }
