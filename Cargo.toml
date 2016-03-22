@@ -27,7 +27,7 @@ byteorder = "^0.4"
 term      = "^0.4"
 
 [dev-dependencies]
-clippy = "^0.0.44"
+clippy = { version = "^0.0.44", optional = true }
 
 [features]
 default = []
