@@ -208,8 +208,7 @@ impl GamePakRom {
         // Loads a binary ROM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading ROM file `{}`.", fp.display());
-        let mut file = try!(File::open(fp));
-        let rbytes = try!(file.read(&mut *self.raw_bytes));
+        let rbytes = File::open(fp)?.read(&mut *self.raw_bytes)?;
         for i in rbytes..MAX_GBA_ROM_SIZE { self.raw_bytes[i] = 0 };
         self.loaded_rom_len = rbytes;
 
@@ -274,8 +273,7 @@ impl GamePakSram {
         // Loads a binary SRAM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading SRAM file `{}`.", fp.display());
-        let mut file = try!(File::open(fp));
-        let rbytes = try!(file.read(&mut *self.0));
+        let rbytes = File::open(fp)?.read(&mut *self.0)?;
         for i in rbytes..MAX_GBA_ROM_SIZE { self.0[i] = 0 };
         Ok(())
     }
@@ -327,25 +325,6 @@ impl GamePak {
     /// Get the GamePak's SRAM.
     pub fn sram_mut<'a>(&'a mut self) -> &'a mut GamePakSram {
         &mut self.sram
-    }
-
-    /// Loads a ROM from a file.
-    ///
-    /// Only ROMs up to 32MiB in size are valid.
-    /// Everything beyond that size will be silently
-    /// dropped.
-    ///
-    /// Unused memory is zero-filled and SRAM is cleared.
-    ///
-    /// # Params
-    /// - `fp`: Path to the ROM file to load.
-    ///
-    /// # Returns
-    /// - `Ok` if loaded successfully.
-    /// - `Err` if an error occurred. The previous data might be damaged.
-    pub fn load_rom_from_file(&mut self, fp: &Path) -> io::Result<()> {
-        self.sram.clear();
-        self.rom.load_from_file(fp)
     }
 }
 

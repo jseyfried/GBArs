@@ -18,7 +18,7 @@ impl fmt::Display for ArmInstruction {
     /// - `Ok` if everything succeeded.
     /// - `Err` in case of an error.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:#010X}\t", self.raw as u32));
+        write!(f, "{:#010X}\t", self.raw as u32)?;
 
         match self.op {
             ArmOpcode::Unknown        => write!(f, "<unknown>"),
@@ -145,15 +145,15 @@ impl ArmInstruction {
     }
 
     fn fmt_register_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{{"));
+        write!(f, "{{")?;
         let mut got_first = false;
         for i in 0 .. 16 {
             if (self.raw & (1 << i)) != 0 {
                 if got_first {
-                    try!(write!(f, ", {}", ArmInstruction::register_name(i)));
+                    write!(f, ", {}", ArmInstruction::register_name(i))?;
                 } else {
                     got_first = true;
-                    try!(write!(f, "{}", ArmInstruction::register_name(i)));
+                    write!(f, "{}", ArmInstruction::register_name(i))?;
                 }
             }
         }
@@ -185,7 +185,7 @@ impl ArmInstruction {
     }
 
     fn fmt_msr_flags(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "msr{}\t{}_flg, ", self.condition_name(), self.psr_name()));
+        write!(f, "msr{}\t{}_flg, ", self.condition_name(), self.psr_name())?;
         self.fmt_shsr_field(f)
     }
 
@@ -217,32 +217,32 @@ impl ArmInstruction {
     }
 
     fn fmt_ldc_stc(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{inst}c{blk}{cond}\tP{cpid}, CR{cd}, ",
+        write!(f, "{inst}c{blk}{cond}\tP{cpid}, CR{cd}, ",
             inst = self.ld_st_name(),
             blk  = if self.is_register_block_transfer() { "l" } else { "" },
             cond = self.condition_name(), cpid = self.cp_id(), cd = self.Rd()
-        ));
+        )?;
         self.fmt_Rn_offset(f, format!("#{:+}", self.offset8()))
     }
 
     fn fmt_ldm_stm(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{inst}m{inc_dec}{pre}{cond}\t{Rn}{auto}, ",
+        write!(f, "{inst}m{inc_dec}{pre}{cond}\t{Rn}{auto}, ",
             inst    = self.ld_st_name(),
             inc_dec = if self.is_offset_added() { 'i' } else { 'd' },
             pre     = if self.is_pre_indexed()  { 'b' } else { 'a' },
             cond    = self.condition_name(), Rn = self.Rn_name(),
             auto    = if self.is_auto_incrementing() { "!" } else { "" }
-        ));
+        )?;
         self.fmt_register_list(f)
     }
 
     fn fmt_ldr_str(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{inst}r{bytes}{t}{cond}\t{Rd}, ",
+        write!(f, "{inst}r{bytes}{t}{cond}\t{Rd}, ",
             inst  = self.ld_st_name(),
             bytes = if self.is_transfering_bytes() { "b" } else { "" },
             t     = if !self.is_pre_indexed() & self.is_auto_incrementing() { "t" } else { "" },
             cond  = self.condition_name(), Rd = self.Rd_name()
-        ));
+        )?;
         self.fmt_offs_field(f)
     }
 
@@ -251,22 +251,22 @@ impl ArmInstruction {
     }
 
     fn fmt_ldrh_strh_reg(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(self.fmt_ldrh_strh_common(f));
+        self.fmt_ldrh_strh_common(f)?;
         self.fmt_Rn_offset(f, format!("{}{}", self.off_sign_name(), self.Rm_name()))
     }
 
     fn fmt_ldrh_strh_imm(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(self.fmt_ldrh_strh_common(f));
+        self.fmt_ldrh_strh_common(f)?;
         self.fmt_Rn_offset(f, format!("#{:+}", self.split_offset8()))
     }
 
     fn fmt_mul_mla(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{inst}{flgs}{cond}\t{Rn}, {Rm}, {Rs}",
+        write!(f, "{inst}{flgs}{cond}\t{Rn}, {Rm}, {Rs}",
             inst = if self.is_accumulating() { "mla" } else { "mul" },
             flgs = if self.is_setting_flags() { "s" } else { "" },
             cond = self.condition_name(),
             Rn = self.Rn_name(), Rm = self.Rm_name(), Rs = self.Rs_name()
-        ));
+        )?;
         if self.is_accumulating() { write!(f, ", {}", self.Rd_name()) } else { Ok(()) }
     }
 
@@ -282,13 +282,13 @@ impl ArmInstruction {
 
     fn fmt_data_processing(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let op = self.dpop();
-        try!(write!(f, "{dpop}{flgs}{cond}\t",
+        write!(f, "{dpop}{flgs}{cond}\t",
             dpop = op,
             flgs = if self.is_setting_flags() & !op.is_test() { "s" } else { "" },
             cond = self.condition_name()
-        ));
-        if !op.is_test() { try!(write!(f, "{}, ", self.Rd_name())); }
-        if !op.is_move() { try!(write!(f, "{}, ", self.Rn_name())); }
+        )?;
+        if !op.is_test() { write!(f, "{}, ", self.Rd_name())?; }
+        if !op.is_move() { write!(f, "{}, ", self.Rn_name())?; }
         self.fmt_shft_field(f)
     }
 }

@@ -379,8 +379,7 @@ impl BiosRom {
         // Loads a binary ROM from a given file and
         // fills the remaining space with zero bytes.
         trace!("Loading BIOS ROM file `{}`.", fp.display());
-        let mut file = try!(File::open(fp));
-        let rbytes = try!(file.read(&mut *self.0));
+        let rbytes = File::open(fp)?.read(&mut *self.0)?;
         for i in rbytes..BIOS_ROM_LEN { self.0[i] = 0 };
         Ok(())
     }

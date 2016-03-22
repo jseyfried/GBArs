@@ -42,7 +42,7 @@ impl Log for ConsoleFileLogger {
             let fmt = format!("{}", record.args()).replace("\n","\n\t\t   ");
 
             // Build a common log message for both targets.
-            let mut msg = format!("[TID={}]\t{}\t{}\n\t\t-- {}\n", tid, record.level(), loc, fmt);
+            let msg = format!("[TID={}]\t{}\t{}\n\t\t-- {}\n", tid, record.level(), loc, fmt);
 
             // Log to file.
             if let Some(f) = self.file.as_ref() {
