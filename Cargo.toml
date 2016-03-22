@@ -1,6 +1,6 @@
 [package]
 name         = "gbars"
-version      = "0.2.0"
+version      = "0.3.0"
 authors      = ["Evrey <evrey@hackish.codes>"]
 readme       = "README.md"
 keywords     = ["emulator", "gba", "arm", "thumb"]
