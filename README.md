@@ -18,6 +18,7 @@ And why GBA?
 	- Disassemble sections of the loaded ROM via command line.
 	- Mimics the standard ARM assembly language, although some parts of the syntax work differently. The integrated disassembler also does not support pseudo instructions like `push`/`pop`, to make the code simpler.
 - Optional optimised BIOS routines.
+- It is entirely written in Rust, a safe and awesome language.
 - TODO
 
 # Build and Run
@@ -39,7 +40,7 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	
 	The SRAM file contains any saved data.
 			
-			GBArs --rom ./ZeroMission.gba --sram ./ZeroMission.sram
+			GBArs --rom ./ZeroMission.gba -load-sram
 			
 - **Disassemble an ARM state instruction**
 	
@@ -51,7 +52,7 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	
 	Disassembles the first 128 bytes, 32 ARM state instructions. This also loads a BIOS ROM from any given file. If no such file is given, an internal default BIOS ROM will be loaded.
 			
-			GBArs --rom ./GbaBios.gba --dasm-bios 0..80
+			GBArs --bios ./GbaBios.gba --dasm-bios 0..80
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**
