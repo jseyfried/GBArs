@@ -2,6 +2,8 @@
 
 A GBA emulator written in Rust.
 
+[![Clippy Linting Result](https://clippy.bashy.io/github/Evrey/GBArs/master/badge.svg)](https://clippy.bashy.io/github/Evrey/GBArs/master/log)
+
 Thanks to a guy named Ferris and his project [Rustendo 64](https://github.com/yupferris/rustendo64), many people got motivated to write their own emulators in Rust. Even I wasn't spared, so here it is, my GBA emulator.
 
 And why GBA?
