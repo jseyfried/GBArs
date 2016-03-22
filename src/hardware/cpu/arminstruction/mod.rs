@@ -202,14 +202,17 @@ impl ArmInstruction {
         let pc = Arm7Tdmi::PC; let rn = self.Rn(); let rd = self.Rd(); let rs = self.Rs(); let rm = self.Rm();
 
         // Check for an invalid use of PC.
-        if rn==pc { match self.op {
-            ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL | ArmOpcode::LDM_STM => {
-                return Err(GbaError::InvalidUseOfR15);
-            },
-            ArmOpcode::LDC_STC | ArmOpcode::LDR_STR | ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm
-            if self.is_auto_incrementing() => { return Err(GbaError::InvalidUseOfR15); },
-            _ => {},
-        }}
+        if rn==pc {
+            if self.is_auto_incrementing() { match self.op {
+                ArmOpcode::LDC_STC | ArmOpcode::LDR_STR | ArmOpcode::LDRH_STRH_Reg | ArmOpcode::LDRH_STRH_Imm => {
+                    return Err(GbaError::InvalidUseOfR15);
+                }, _ => {},
+            }} else { match self.op {
+                ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL | ArmOpcode::LDM_STM => {
+                    return Err(GbaError::InvalidUseOfR15);
+                }, _ => {},
+            }}
+        }
         if rd==pc { match self.op {
             ArmOpcode::MRS | ArmOpcode::SWP | ArmOpcode::MUL_MLA | ArmOpcode::MULL_MLAL => {
                 return Err(GbaError::InvalidUseOfR15)
@@ -287,9 +290,10 @@ impl ArmInstruction {
 
     /// Get the index of register `Rm`.
     #[allow(non_snake_case)]
-    pub fn Rm(&self) -> usize { ((self.raw >> 0) & 0b1111) as usize }
+    pub fn Rm(&self) -> usize { ((self.raw     ) & 0b1111) as usize }
 
     /// Get the target co-processor's ID.
+    #[cfg_attr(feature="clippy", allow(inline_always))]
     #[inline(always)]
     pub fn cp_id(&self) -> usize { self.Rs() }
 
@@ -428,6 +432,7 @@ impl ArmInstruction {
     /// # Returns
     /// - `true`: The offset is an immediate non-sign-extended value.
     /// - `false`: The offset is a shifted register value.
+    #[cfg_attr(feature="clippy", allow(inline_always))]
     #[inline(always)]
     pub fn is_offset_field_immediate(&self) -> bool { self.is_shift_field_register() }
 
@@ -662,8 +667,7 @@ impl ArmInstruction {
         if r == 0 { return Err(a); }
 
         if r >= 32 { Err(match (self.raw >> 5) & 0b11 {
-            0 => 0,
-            1 => 0,
+            0 | 1 => 0,
             2 => a >> 31,
             3 => if r == 32 { a } else { a.rotate_right(r % 32) },
             _ => unreachable!(),

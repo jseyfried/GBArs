@@ -55,8 +55,7 @@ impl Log for ConsoleFileLogger {
             }
 
             // Log to stdout.
-            if !self.colour { println!("{}", msg); }
-            else {
+            if self.colour {
                 // Colourising stuff is only done for terminals.
                 terminal.reset().unwrap_or(());
                 write!(terminal, "[TID={}]\t", tid).unwrap();
@@ -74,6 +73,7 @@ impl Log for ConsoleFileLogger {
                 writeln!(terminal, "{}\n", fmt).unwrap();
                 terminal.reset().unwrap_or(());
             }
+            else { println!("{}", msg); }
         }
     }
 }

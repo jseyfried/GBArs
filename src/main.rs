@@ -234,15 +234,15 @@ fn configure_logging(args: &CmdLineArgs) {
 
 fn handle_oneshot_commands(args: &CmdLineArgs, gba: &hardware::Gba) {
     // Single instructions to disassemble?
-    if let Some(ref x) = args.single_disasm_arm   { disasm_arm(x); }
-    if let Some(ref x) = args.single_disasm_thumb { disasm_thumb(x); }
+    if let Some(ref x) = args.single_disasm_arm   { disasm_arm(x.as_str()); }
+    if let Some(ref x) = args.single_disasm_thumb { disasm_thumb(x.as_str()); }
 
     // ROM sections to disassemble?
-    if let Some(ref x) = args.disasm_bios { disasm_bios(x, gba); }
+    if let Some(ref x) = args.disasm_bios { disasm_bios(x.as_str(), gba); }
 }
 
-fn disasm_arm(x: &String) {
-    match u32::from_str_radix(x.as_str(), 16) {
+fn disasm_arm(x: &str) {
+    match u32::from_str_radix(x, 16) {
         Ok(i) => { match hardware::cpu::ArmInstruction::decode(i) {
             Ok(inst) => info!("DASM ARM:\t{}", inst),
             Err(e)   => info!("DASM ARM invalid - {}", e),
@@ -251,17 +251,17 @@ fn disasm_arm(x: &String) {
     }
 }
 
-fn disasm_thumb(x: &String) {
+fn disasm_thumb(x: &str) {
     error!("DASM THUMB: Not yet implemented!\n{}", x);
     // TODO implement THUMB state instructions.
 }
 
-fn disasm_bios(x: &String, gba: &hardware::Gba) {
+fn disasm_bios(x: &str, gba: &hardware::Gba) {
     use hardware::memory::Rom32;
     use std::fmt::Write;
     let r = if let Some(r) = parse_hex_range(x, 0, hardware::memory::BIOS_ROM_LEN as u32) { r } else { return; };
     let bios = gba.bios();
-    let mut msg = "Disassembling BIOS ROM section:\n\nOffset   Data      \tInstruction\n".to_string();
+    let mut msg = "Disassembling BIOS ROM section:\n\nOffset   Data      \tInstruction\n".to_owned();
     let mut i = r.start & 0xFFFFFFFC;
     while i < r.end {
         let w = bios.read_word(i);
@@ -276,7 +276,7 @@ fn disasm_bios(x: &String, gba: &hardware::Gba) {
     info!("{}", msg);
 }
 
-fn parse_hex_range(x: &String, default_begin: u32, default_end: u32) -> Option<Range<u32>> {
+fn parse_hex_range(x: &str, default_begin: u32, default_end: u32) -> Option<Range<u32>> {
     let mut s = x.split("..");
     let a = if let Some(a) = s.next() { a } else { return None; };
     let b = if let Some(b) = s.next() { b } else { return None; };
@@ -357,7 +357,6 @@ fn run_gba_repl(gba: &mut hardware::Gba) -> Result<(), hardware::GbaError> {
 }
 
 fn do_hexdump(s: &str, gba: &hardware::Gba) {
-    let s = s.to_string();
     if let Some(mut r) = parse_hex_range(&s, 0, 0) {
         r.start &= !31;
         r.end   +=  31;

@@ -2,7 +2,7 @@
 
 A GBA emulator written in Rust.
 
-[![GitHub Repo Latest Tag](https://img.shields.io/github/tag/Evrey/GBArs.svg)](https://github.com/Evrey/GBArs) [![Travic-CI Build Status](https://api.travis-ci.org/Evrey/GBArs.svg)](https://travis-ci.org/Evrey/GBArs) [![Clippy Linting Result](https://clippy.bashy.io/github/Evrey/GBArs/master/badge.svg)](https://clippy.bashy.io/github/Evrey/GBArs/master/log) [![Apache License 2.0](https://img.shields.io/github/license/Evrey/GBArs.svg)](https://tldrlegal.com/license/apache-license-2.0-%28apache-2.0%29)
+[![Travic-CI Build Status](https://api.travis-ci.org/Evrey/GBArs.svg)](https://travis-ci.org/Evrey/GBArs) [![Clippy Linting Result](https://clippy.bashy.io/github/Evrey/GBArs/master/badge.svg)](https://clippy.bashy.io/github/Evrey/GBArs/master/log) [![Apache License 2.0](https://img.shields.io/github/license/Evrey/GBArs.svg)](https://tldrlegal.com/license/apache-license-2.0-%28apache-2.0%29)
 
 Thanks to a guy named Ferris and his project [Rustendo 64](https://github.com/yupferris/rustendo64), many people got motivated to write their own emulators in Rust. Even I wasn't spared, so here it is, my GBA emulator.
 

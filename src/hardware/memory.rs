@@ -185,8 +185,8 @@ impl PhysicalAddress {
     ///
     /// # Returns
     /// A global physical address.
-    pub fn to_u32(self) -> u32 {
-        match self {
+    pub fn to_u32(&self) -> u32 {
+        match *self {
             PhysicalAddress::BiosROM(p)       => p + BIOS_ROM_FIRST,
             PhysicalAddress::OnBoardWRAM(p)   => p + WRAM_ON_BOARD_FIRST,
             PhysicalAddress::OnChipWRAM(p)    => p + WRAM_ON_CHIP_FIRST,
@@ -220,7 +220,7 @@ pub trait RawBytes {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8];
+    fn bytes(&self, offs: u32) -> &[u8];
 
     /// Returns a byte slice starting at `offs`.
     ///
@@ -236,7 +236,7 @@ pub trait RawBytes {
     /// Should panic if the given offset is out of bounds,
     /// as bounds checking should be done while converting
     /// global to local addresses.
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8];
+    fn bytes_mut(&mut self, offs: u32) -> &mut [u8];
 }
 
 /// A trait for 8-bit ROMs.
@@ -357,9 +357,7 @@ pub struct BiosRom(Box<[u8; BIOS_ROM_LEN]>);
 
 impl BiosRom {
     /// Creates a new zero-filled BIOS ROM.
-    pub fn new() -> BiosRom {
-        BiosRom(box [0_u8; BIOS_ROM_LEN])
-    }
+    pub fn new() -> BiosRom { BiosRom(box [0_u8; BIOS_ROM_LEN]) }
 
     /// Loads a ROM from a file.
     ///
@@ -386,12 +384,16 @@ impl BiosRom {
 }
 
 impl RawBytes for BiosRom {
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] { &self.0[(offs as usize)..] }
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] { &mut self.0[(offs as usize)..] }
+    fn bytes(&self, offs: u32) -> &[u8] { &self.0[(offs as usize)..] }
+    fn bytes_mut(&mut self, offs: u32) -> &mut [u8] { &mut self.0[(offs as usize)..] }
 }
 impl Rom8  for BiosRom {}
 impl Rom16 for BiosRom {}
 impl Rom32 for BiosRom {}
+
+impl Default for BiosRom {
+    fn default() -> BiosRom { BiosRom(box [0_u8; BIOS_ROM_LEN]) }
+}
 
 
 /*

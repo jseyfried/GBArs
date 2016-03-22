@@ -147,7 +147,7 @@ impl Arm7Tdmi {
         let nmi =  new_mode as u8 as usize;
 
         // Save banked registers R13, R14, SPSR.
-        let ret_addr = self.gpr[Arm7Tdmi::PC] + 0; // TODO special offset by exception type
+        let ret_addr = self.gpr[Arm7Tdmi::PC]; // FIXME TODO add special offset by exception type
         self.gpr_r14_all[cmi] = self.gpr[14];
         self.gpr_r14_all[nmi] = ret_addr;
         self.gpr[14] = ret_addr;
@@ -178,6 +178,7 @@ impl Arm7Tdmi {
         // TODO thumb
     }
 
+    #[cfg_attr(feature="clippy", allow(inline_always))]
     #[inline(always)]
     fn increment_pc(&mut self) {
         self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(if self.state == State::ARM { 4 } else { 2 });

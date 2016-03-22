@@ -28,26 +28,26 @@ impl Exception {
     /// 1 = highest, 7 = lowest.
     pub fn priority(self) -> u8 {
         match self {
+            Exception::AddressExceeds26Bit |
+            Exception::FastInterrupt        => 3,
             Exception::Reset                => 1,
             Exception::UndefinedInstruction => 7,
             Exception::SoftwareInterrupt    => 6,
             Exception::PrefetchAbort        => 5,
             Exception::DataAbort            => 2,
-            Exception::AddressExceeds26Bit  => 3,
             Exception::NormalInterrupt      => 4,
-            Exception::FastInterrupt        => 3,
         }
     }
 
     /// Get the exception's CPU mode on entry.
     pub fn mode_on_entry(self) -> Mode {
         match self {
-            Exception::Reset                => Mode::Supervisor,
-            Exception::UndefinedInstruction => Mode::Undefined,
-            Exception::SoftwareInterrupt    => Mode::Supervisor,
-            Exception::PrefetchAbort        => Mode::Abort,
+            Exception::PrefetchAbort |
             Exception::DataAbort            => Mode::Abort,
+            Exception::Reset |
+            Exception::SoftwareInterrupt |
             Exception::AddressExceeds26Bit  => Mode::Supervisor,
+            Exception::UndefinedInstruction => Mode::Undefined,
             Exception::NormalInterrupt      => Mode::IRQ,
             Exception::FastInterrupt        => Mode::FIQ,
         }
@@ -58,6 +58,7 @@ impl Exception {
     /// # Returns
     /// - `true` if FIQ should be disabled on entry.
     /// - `false` if FIQ should be left unchanged.
+    #[cfg_attr(feature="clippy", allow(inline_always))]
     #[inline(always)]
     pub fn disable_fiq_on_entry(self) -> bool {
         (self == Exception::Reset) | (self == Exception::FastInterrupt)
@@ -68,6 +69,7 @@ impl Exception {
     /// # Returns
     /// A physical address to the exception's
     /// vector entry.
+    #[cfg_attr(feature="clippy", allow(inline_always))]
     #[inline(always)]
     pub fn vector_address(self) -> u32 {
         (self as u8 as u32) * 4

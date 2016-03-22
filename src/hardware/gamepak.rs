@@ -227,18 +227,17 @@ impl GamePakRom {
 }
 
 impl RawBytes for GamePakRom {
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] {
-        &self.raw_bytes[(offs as usize)..]
-    }
-
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] {
-        &mut self.raw_bytes[(offs as usize)..]
-    }
+    fn bytes(&self, offs: u32) -> &[u8] { &self.raw_bytes[(offs as usize)..] }
+    fn bytes_mut(&mut self, offs: u32) -> &mut [u8] { &mut self.raw_bytes[(offs as usize)..] }
 }
 
 impl Rom8  for GamePakRom {}
 impl Rom16 for GamePakRom {}
 impl Rom32 for GamePakRom {}
+
+impl Default for GamePakRom {
+    fn default() -> GamePakRom { GamePakRom::new() }
+}
 
 
 /// Implements a GamePak's SRAM.
@@ -280,14 +279,19 @@ impl GamePakSram {
 }
 
 impl RawBytes for GamePakSram {
-    fn bytes<'a>(&'a self, offs: u32) -> &'a [u8] { &(*self.0)[(offs as usize)..] }
-    fn bytes_mut<'a>(&'a mut self, offs: u32) -> &'a mut [u8] { &mut (*self.0)[(offs as usize)..] }
+    fn bytes(&self, offs: u32) -> &[u8] { &(*self.0)[(offs as usize)..] }
+    fn bytes_mut(&mut self, offs: u32) -> &mut [u8] { &mut (*self.0)[(offs as usize)..] }
 }
 impl Rom8 for GamePakSram {}
 impl Ram8 for GamePakSram {}
 
+impl Default for GamePakSram {
+    fn default() -> GamePakSram { GamePakSram::new() }
+}
+
 
 /// Implements a GamePak.
+#[derive(Default)]
 pub struct GamePak {
     rom: GamePakRom,
     sram: GamePakSram,
@@ -303,29 +307,19 @@ impl GamePak {
     }
 
     /// Get the GamePak's ROM's header.
-    pub fn header<'a>(&'a self) -> GamePakRomHeader<'a> {
-        self.rom.header()
-    }
+    pub fn header(&self) -> GamePakRomHeader { self.rom.header() }
 
     /// Get the GamePak's ROM.
-    pub fn rom<'a>(&'a self) -> &'a GamePakRom {
-        &self.rom
-    }
+    pub fn rom(&self) -> &GamePakRom { &self.rom }
 
     /// Get the GamePak's ROM.
-    pub fn rom_mut<'a>(&'a mut self) -> &'a mut GamePakRom {
-        &mut self.rom
-    }
+    pub fn rom_mut(&mut self) -> &mut GamePakRom { &mut self.rom }
 
     /// Get the GamePak's SRAM.
-    pub fn sram<'a>(&'a self) -> &'a GamePakSram {
-        &self.sram
-    }
+    pub fn sram(&self) -> &GamePakSram { &self.sram }
 
     /// Get the GamePak's SRAM.
-    pub fn sram_mut<'a>(&'a mut self) -> &'a mut GamePakSram {
-        &mut self.sram
-    }
+    pub fn sram_mut(&mut self) -> &mut GamePakSram { &mut self.sram }
 }
 
 

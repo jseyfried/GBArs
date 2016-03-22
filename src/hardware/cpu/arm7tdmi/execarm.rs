@@ -93,7 +93,7 @@ impl Arm7Tdmi {
             res = res.wrapping_add(((self.gpr[inst.Rn()] as u64) << 32) | (self.gpr[inst.Rd()] as u64));
         }
         self.gpr[inst.Rn()] = ((res >> 32) & (u32::MAX as u64)) as i32;
-        self.gpr[inst.Rd()] = ((res >>  0) & (u32::MAX as u64)) as i32;
+        self.gpr[inst.Rd()] = ((res      ) & (u32::MAX as u64)) as i32;
 
         if inst.is_setting_flags() {
             self.cpsr.set_N((res as i64) < 0);
@@ -231,6 +231,7 @@ impl Arm7Tdmi {
     fn override_psr(psr: &mut u32, val: u32) { *psr = (val & CPSR::NON_RESERVED_MASK) | (*psr & !CPSR::NON_RESERVED_MASK); }
     fn override_psr_flags(cpsr: &mut u32, val: u32) { *cpsr = (val & CPSR::FLAGS_MASK) | (*cpsr & !CPSR::FLAGS_MASK); }
 
+    #[cfg_attr(feature="clippy", allow(collapsible_if))] // Better readability in this case.
     fn execute_ldr_str(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         let mut base = self.gpr[inst.Rn()] as u32;
         let offs = inst.shifted_offset(&self.gpr[..], self.cpsr.C()) as u32;
