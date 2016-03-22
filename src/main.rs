@@ -152,6 +152,14 @@ fn main() {
 
     // Exit early?
     if args.exit { trace!("Exiting early."); process::exit(0); }
+
+    // TODO remove and build a REPL
+    gba.cpu_arm7tdmi_mut().reset();
+    debug!("BEFORE: {}", gba.cpu_arm7tdmi());
+    if let Err(e) = gba.cpu_arm7tdmi_mut().pipeline_step() {
+        error!("Arm7Tdmi failed executing a pipeline step:\n{}", e);
+    }
+    debug!("AFTER: {}", gba.cpu_arm7tdmi());
 }
 
 

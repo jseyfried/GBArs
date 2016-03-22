@@ -15,12 +15,14 @@ pub use self::exception::*;
 pub use self::cpsr::*;
 pub use self::armcondition::*;
 pub use self::execarm::*;
+pub use self::display::*;
 
 pub mod exception;
 pub mod cpsr;
 pub mod armcondition;
 
 mod execarm;
+mod display;
 
 /// Decides what the CPU should do after executing an instruction.
 pub enum CpuAction {
