@@ -17,7 +17,7 @@ And why GBA?
 	- Disassemble individual instructions via command line.
 	- Disassemble sections of the loaded ROM via command line.
 	- Mimics the standard ARM assembly language, although some parts of the syntax work differently. The integrated disassembler also does not support pseudo instructions like `push`/`pop`, to make the code simpler.
-- Optional optimised BIOS routines.
+- Optional optimised BIOS routines. (TODO)
 - It is entirely written in Rust, a safe and awesome language.
 - TODO
 
@@ -53,6 +53,12 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	Disassembles the first 128 bytes, 32 ARM state instructions. This also loads a BIOS ROM from any given file. If no such file is given, an internal default BIOS ROM will be loaded.
 			
 			GBArs --bios ./GbaBios.gba --dasm-bios 0..80
+
+# Screenshots
+
+Here you can see the integrated GBA terminal debugger in action. By just hitting `Enter`, the emulator runs a single pipeline step, i.e. a single instruction. The next instruction to be executed can be seen in the pipeline state.
+
+![GBA Debugger Action](./ref/term_stuff_00.png)
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**

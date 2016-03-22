@@ -118,6 +118,12 @@ pub struct CmdLineArgs {
     /// will find a corresponding SRAM file to load by
     /// changing the file extension.
     pub load_sram: bool,
+
+    /// Accepts `-D` or `--debug-repl` as `true`.
+    ///
+    /// If `true`, runs the emulator in a REPL-style
+    /// debug loop.
+    pub run_repl: bool,
 }
 
 impl Default for CmdLineArgs {
@@ -129,11 +135,12 @@ impl Default for CmdLineArgs {
             single_disasm_arm: None,
             single_disasm_thumb: None,
             disasm_bios: None,
-            verbose: cfg!(test), // Default to `true` while testing.
+            verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
             exit: false,
             optimise_swi: false,
             load_sram: false,
+            run_repl: false,
         }
     }
 }
@@ -150,16 +157,15 @@ fn main() {
     configure_gba_from_command_line(&mut gba, &args);
     handle_oneshot_commands(&args, &gba);
 
+    // Run REPL?
+    if args.run_repl { if let Err(e) = run_gba_repl(&mut gba) {
+        error!("{}", e);
+    }}
+
     // Exit early?
     if args.exit { trace!("Exiting early."); process::exit(0); }
 
     // TODO remove and build a REPL
-    gba.cpu_arm7tdmi_mut().reset();
-    debug!("BEFORE: {}", gba.cpu_arm7tdmi());
-    if let Err(e) = gba.cpu_arm7tdmi_mut().pipeline_step() {
-        error!("Arm7Tdmi failed executing a pipeline step:\n{}", e);
-    }
-    debug!("AFTER: {}", gba.cpu_arm7tdmi());
 }
 
 
@@ -212,6 +218,9 @@ fn parse_command_line(args: &mut CmdLineArgs) {
           .add_option(&["-s","--emulate-swi"], StoreFalse, "Disable optimised BIOS functions. (default)");
     parser.refer(&mut args.load_sram)
           .add_option(&["-l", "--load-sram"], StoreTrue, "Tries loading an SRAM file corresponding to a given `--rom`.");
+    parser.refer(&mut args.run_repl)
+          .add_option(&["-D", "--debug-repl"], StoreTrue, "Enters a debug loop where each \
+                                                           instruction is emulated step by step.");
     parser.parse_args_or_exit();
 }
 
@@ -319,6 +328,49 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
 
     // Configure the CPU.
     gba.cpu_arm7tdmi_mut().set_swi_optimised(args.optimise_swi);
+}
+
+
+fn run_gba_repl(gba: &mut hardware::Gba) -> Result<(), hardware::GbaError> {
+    use std::io::Write;
+    gba.cpu_arm7tdmi_mut().reset();
+    debug!("{}", gba.cpu_arm7tdmi());
+    let mut input = String::new();
+    loop {
+        print!("\t[q = Quit, hex A..B = Hexdump Memory A..B]\n\t> ");
+        std::io::stdout().flush().unwrap();
+        input.clear();
+        std::io::stdin().read_line(&mut input).unwrap();
+        let mut s = input.trim().split_whitespace();
+
+        match s.next() {
+            Some("q") => break,
+            Some("") | None => {
+                try!(gba.cpu_arm7tdmi_mut().pipeline_step());
+                debug!("{}", gba.cpu_arm7tdmi());
+            },
+            Some("hex") => { if let Some(r) = s.next() { do_hexdump(r, gba); } },
+            _ => println!("\t\t<What?>"),
+        }
+    }
+    Ok(())
+}
+
+fn do_hexdump(s: &str, gba: &hardware::Gba) {
+    let s = s.to_string();
+    if let Some(mut r) = parse_hex_range(&s, 0, 0) {
+        r.start &= !31;
+        r.end   +=  31;
+        r.end   &= !31;
+        print!("\n\t\t           00           04           08           0C           \
+                                 10           14           18           1C");
+        for i in r {
+            if (i % 32) == 0 { print!("\n\t\t{:08X} -", i); }
+            else if (i % 4) == 0 { print!(" "); }
+            print!(" {:02X}", gba.bus().load_byte(i).unwrap_or(0));
+        }
+        println!("\n");
+    }
 }
 
 

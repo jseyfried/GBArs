@@ -54,6 +54,11 @@ impl Mode {
 pub struct CPSR(pub u32);
 
 impl CPSR {
+    /// Used to initialise a PSR.
+    pub const RAW_DEFAULT: u32 = CPSR::MODE_SUPERVISOR
+                               | (1 << (CPSR::IRQ_DISABLE_BIT as u32))
+                               | (1 << (CPSR::FIQ_DISABLE_BIT as u32));
+
     /// Used to mask reserved bits away.
     pub const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
     //                                   NZCV                       IFTMMMMM
@@ -156,7 +161,7 @@ impl CPSR {
             CPSR::MODE_UNDEFINED  => Mode::Undefined,
             CPSR::MODE_SYSTEM     => Mode::System,
             _ => {
-                error!("CPSR: Unrecognised mode bit pattern {:#8b}.", self.0 & CPSR::MODE_MASK);
+                error!("CPSR: Unrecognised mode bit pattern {:#010b}.", self.0 & CPSR::MODE_MASK);
                 panic!("Aborting due to illegal mode bits.");
             },
         }
@@ -237,6 +242,10 @@ impl CPSR {
     /// Set the new state of the V bit.
     #[allow(non_snake_case)]
     pub fn set_V(&mut self, n: bool) { if n { self.0 |= 1 << 28; } else { self.0 &= !(1 << 28); } }
+}
+
+impl Default for CPSR {
+    fn default() -> CPSR { CPSR(CPSR::RAW_DEFAULT) }
 }
 
 impl fmt::Display for CPSR {

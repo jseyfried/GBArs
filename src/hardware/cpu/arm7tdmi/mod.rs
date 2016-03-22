@@ -83,8 +83,8 @@ impl Arm7Tdmi {
     pub fn new(bus: Rc<RefCell<Bus>>) -> Arm7Tdmi {
         Arm7Tdmi {
             gpr: [0; 16],
-            cpsr: CPSR(0),
-            spsr: [CPSR(0); 7],
+            cpsr: CPSR::default(),
+            spsr: [CPSR::default(); 7],
 
             decoded_arm: ArmInstruction::nop(),
             fetched_arm: ArmInstruction::NOP_RAW,
@@ -123,11 +123,7 @@ impl Arm7Tdmi {
     pub fn reset(&mut self) {
         self.gpr[Arm7Tdmi::PC] = 0;
 
-        self.cpsr = CPSR(
-            (CPSR::MODE_SUPERVISOR)
-          | (1 << CPSR::IRQ_DISABLE_BIT)
-          | (1 << CPSR::FIQ_DISABLE_BIT)
-        );
+        self.cpsr = CPSR::default();
 
         self.mode = Mode::Supervisor;
         self.state = State::ARM;

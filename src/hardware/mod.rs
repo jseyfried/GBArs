@@ -27,6 +27,7 @@ pub mod bus;
 /// what not.
 pub struct Gba {
     cpu: Arm7Tdmi,
+    bus: Rc<RefCell<Bus>>,
     bios: Rc<RefCell<memory::BiosRom>>,
     game_pak: Rc<RefCell<GamePak>>,
 }
@@ -39,6 +40,7 @@ impl Gba {
         let bus = Rc::new(RefCell::new(Bus::new(gpak.clone(), bios.clone())));
         Gba {
             cpu: Arm7Tdmi::new(bus.clone()),
+            bus: bus,
             bios: bios,
             game_pak: gpak,
         }
@@ -61,6 +63,12 @@ impl Gba {
 
     /// Get a mutable reference to the ARM7TDMI CPU emulator.
     pub fn cpu_arm7tdmi_mut<'a>(&'a mut self) -> &'a mut Arm7Tdmi { &mut self.cpu }
+
+    /// Get an immutable reference to the bus system.
+    pub fn bus(&self) -> Ref<Bus> { self.bus.borrow() }
+
+    /// Get a mutable reference to the bus system.
+    pub fn bus_mut(&mut self) -> RefMut<Bus> { self.bus.borrow_mut() }
 }
 
 
