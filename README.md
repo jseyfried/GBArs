@@ -40,7 +40,7 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 	
 	The SRAM file contains any saved data.
 			
-			GBArs --rom ./ZeroMission.gba -load-sram
+			GBArs --rom ./ZeroMission.gba --load-sram
 			
 - **Disassemble an ARM state instruction**
 	
