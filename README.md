@@ -91,17 +91,16 @@ Here you can see the integrated GBA terminal debugger in action. By just hitting
 	A hint on how you recognise whether the website erroneously disassembles ARM instructions as THUMB instructions: The first instruction of a BIOS or GamePak ROM file is almost always an unconditional ARM state branch like `b loc_00000058`.
 	
 	Also note that ARMv4 is just the "instruction set version". Although the GBA's CPU is an ARM7TDMI (again, T = THUMB), its instruction set is ARMv4.
-- **[ARM7TDMI Technical Reference Manual](http://www.atmel.com/Images/ddi0029g_7tdmi_r3_trm.pdf)**
-	
-	> This document is Open Access. This document has no restriction on distribution.
-	
-	This PDF also includes a data sheet on the THUMB state instruction set. There aren't, however, no detailed notes on what the different instructions actually do, as this manual focuses more on delays and signals.
-- **[ARM7TDMI Instruction Set Reference](http://morrow.ece.wisc.edu/ECE353/arm7tdmi_instruction_set_reference.pdf)**
+- **[Rust Programming Language](https://www.rust-lang.org/)**
 
-	> Department of Electrical and Computer Engineering University of Wisconsin-Madison
+	> Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
 
-	Thanks to those guys, here is an instruction set reference manual for the ARM7TDMI, which is the very CPU used in the GBA.
+	This language is just beautiful. Try it! Use it! It even provides an online book and other useful resources to learn and master this language. And if you use DuckDuckGo as a search engine, you can browse the standard library documentation using `!rust` for Rust stable or `!rustn` for Rust nightly.
+- **[Cargo Package Manager](https://crates.io/)**
 
+	> The Rust community’s crate host
+
+	Rust's package manager. Here you can find almost all Rust packages, called "crates".
 
 # References
 - **[Rustendo64](https://github.com/yupferris/rustendo64)**
@@ -114,16 +113,20 @@ Here you can see the integrated GBA terminal debugger in action. By just hitting
 	> GBATEK written 2001-2014 by Martin Korth, programming specs for the GBA and NDS hardware
 
 	A pretty detailed one-page with almost all the information you need.
-- **[Rust Programming Language](https://www.rust-lang.org/)**
+- **[ARM7TDMI ARM Instruction Set Reference](http://bear.ces.cwru.edu/eecs_382/ARM7-TDMI-manual-pt2.pdf)**
+	
+	> Open Access
+	> 
+	> This chapter describes the ARM instruction set.
 
-	> Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
-
-	This language is just beautiful. Try it! Use it! It even provides an online book and other useful resources to learn and master this language. And if you use DuckDuckGo as a search engine, you can browse the standard library documentation using `!rust` for Rust stable or `!rustn` for Rust nightly.
-- **[Cargo Package Manager](https://crates.io/)**
-
-	> The Rust community’s crate host
-
-	Rust's package manager. Here you can find almost all Rust packages, called "crates".
+	Here is a reference manual listing all ARM state instructions of the GBA's main CPU. This PDF file not only shows every instruction's standard assembly syntax, but also specifies their binary encoding and their side effects and restrictions.
+- **[ARM7TDMI THUMB Instruction Set Reference](https://ece.uwaterloo.ca/~ece222/ARM/ARM7-TDMI-manual-pt3.pdf)**
+	
+	> Open Access
+	> 
+	> This chapter describes the THUMB instruction set.
+	
+	Like the document above, this one handles the smaller 16-bit THUMB state instructions. If you are wondering what `ARM7-TDMI-manual-pt1.pdf` is all about: Nothing of much interest for emulator development. Signaling, wiring, what not. 
 
 # License
 
