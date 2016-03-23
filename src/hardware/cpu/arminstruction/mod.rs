@@ -129,7 +129,6 @@ pub enum ArmOpcode {
 /// of utility and decoding functions to ease
 /// ARM instruction emulation.
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ArmInstruction {
     raw: u32,
     op: ArmOpcode,

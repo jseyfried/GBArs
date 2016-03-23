@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use super::arminstruction::ArmInstruction;
+use super::thumbinstruction::ThumbInstruction;
 use super::super::bus::*;
 use super::super::error::*;
 
@@ -40,6 +41,8 @@ pub struct Arm7Tdmi {
     // Pipeline implementation.
     decoded_arm: ArmInstruction,
     fetched_arm: u32,
+    decoded_thumb: ThumbInstruction,
+    fetched_thumb: u16,
 
     // Register backups for mode changes.
     gpr_r8_r12_fiq: [i32; 5],
@@ -88,6 +91,8 @@ impl Arm7Tdmi {
 
             decoded_arm: ArmInstruction::nop(),
             fetched_arm: ArmInstruction::NOP_RAW,
+            decoded_thumb: ThumbInstruction::nop(),
+            fetched_thumb: ThumbInstruction::NOP_RAW,
 
             gpr_r8_r12_fiq: [0; 5],
             gpr_r8_r12_other: [0; 5],
@@ -173,9 +178,10 @@ impl Arm7Tdmi {
     }
 
     fn flush_pipeline(&mut self) {
-        self.decoded_arm = ArmInstruction::nop();
-        self.fetched_arm = ArmInstruction::NOP_RAW;
-        // TODO thumb
+        self.decoded_arm   =   ArmInstruction::nop();
+        self.fetched_arm   =   ArmInstruction::NOP_RAW;
+        self.decoded_thumb = ThumbInstruction::nop();
+        self.fetched_thumb = ThumbInstruction::NOP_RAW;
     }
 
     #[cfg_attr(feature="clippy", allow(inline_always))]
@@ -219,6 +225,12 @@ impl Arm7Tdmi {
 
             action
         } else {
+            // Fetch.
+            let new_fetched_thumb = try!(self.bus.borrow().load_halfword(self.gpr[Arm7Tdmi::PC] as u32)) as u16;
+
+            // Apply new state.
+            self.fetched_thumb = new_fetched_thumb;
+
             unimplemented!();
         };
 
