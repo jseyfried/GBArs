@@ -46,7 +46,10 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
+use super::super::error::*;
+
 /// A decoded THUMB opcode.
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ThumbOpcode {
     #[doc = "ADD/SUB with an immediate value or register."] AddSub,
     #[doc = "Shifted register transfer."]                   MoveShiftedReg,
@@ -86,11 +89,39 @@ impl ThumbInstruction {
 
     /// Creates a pseudo NOP instruction.
     ///
-    /// ## Returns
     /// The generated instruction moves R8 into R8
     /// without updating any of the CPSR flags.
     pub fn nop() -> ThumbInstruction {
         ThumbInstruction { raw: ThumbInstruction::NOP_RAW, op: ThumbOpcode::HiRegOpBx }
+    }
+
+    /// Decodes a raw 16-bit integer as a THUMB instruction.
+    pub fn decode(raw: u16) -> Result<ThumbInstruction, GbaError> {
+        // Decode the opcode to something easier to compare and match.
+        let op: ThumbOpcode =
+             if (raw & 0xF800) == 0x1800 { ThumbOpcode::AddSub }
+        else if (raw & 0xE000) == 0x0000 { ThumbOpcode::MoveShiftedReg }
+        else if (raw & 0xE000) == 0x2000 { ThumbOpcode::DataProcessingFlags }
+        else if (raw & 0xFC00) == 0x4000 { ThumbOpcode::AluOperation }
+        else if (raw & 0xFC00) == 0x4400 { ThumbOpcode::HiRegOpBx }
+        else if (raw & 0xF800) == 0x4800 { ThumbOpcode::LdrPcImm }
+        else if (raw & 0xF200) == 0x5000 { ThumbOpcode::LdrStrReg }
+        else if (raw & 0xF200) == 0x5200 { ThumbOpcode::LdrhStrhReg }
+        else if (raw & 0xE000) == 0x6000 { ThumbOpcode::LdrStrImm }
+        else if (raw & 0xF000) == 0x8000 { ThumbOpcode::LdrhStrhImm }
+        else if (raw & 0xF000) == 0x9000 { ThumbOpcode::LdrStrSpImm }
+        else if (raw & 0xF000) == 0xA000 { ThumbOpcode::CalcAddrImm }
+        else if (raw & 0xFF00) == 0xB000 { ThumbOpcode::AddSpOffs }
+        else if (raw & 0xF600) == 0xB400 { ThumbOpcode::PushPopRegs }
+        else if (raw & 0xF000) == 0xC000 { ThumbOpcode::LdmStmRegs }
+        else if (raw & 0xFF00) == 0xDF00 { ThumbOpcode::SoftwareInterrupt }
+        else if (raw & 0xF000) == 0xD000 { ThumbOpcode::BranchConditionOffs }
+        else if (raw & 0xF800) == 0xE000 { ThumbOpcode::BranchOffs }
+        else if (raw & 0xF000) == 0xF000 { ThumbOpcode::BranchLongOffs }
+        else { return Err(GbaError::InvalidThumbInstruction(raw)); };
+
+        // Done decoding!
+        Ok(ThumbInstruction { raw: raw, op: op })
     }
 }
 

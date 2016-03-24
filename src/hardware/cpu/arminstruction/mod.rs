@@ -181,9 +181,7 @@ impl ArmInstruction {
         else if (raw & 0x0F000010) == 0x0E000010 { ArmOpcode::MRC_MCR }
         else if (raw & 0x0E000000) == 0x0C000000 { ArmOpcode::LDC_STC }
         else if (raw & 0x0C000000) == 0x00000000 { ArmOpcode::DataProcessing }
-        else {
-            return Err(GbaError::InvalidArmInstruction(raw));
-        };
+        else { return Err(GbaError::InvalidArmInstruction(raw)); };
 
         // Done decoding!
         Ok(ArmInstruction { raw: raw, op: op })
