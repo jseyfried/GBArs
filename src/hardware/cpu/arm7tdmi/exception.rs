@@ -5,7 +5,7 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use super::cpsr::Mode;
+use super::psr::Mode;
 
 /// CPU exceptions.
 #[derive(Debug, PartialEq, Clone, Copy)]

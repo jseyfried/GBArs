@@ -13,16 +13,18 @@ use super::super::bus::*;
 use super::super::error::*;
 
 pub use self::exception::*;
-pub use self::cpsr::*;
+pub use self::psr::*;
+pub use self::alu::*;
 pub use self::armcondition::*;
 pub use self::execarm::*;
 pub use self::display::*;
 
 pub mod exception;
-pub mod cpsr;
+pub mod psr;
 pub mod armcondition;
 
 mod execarm;
+mod alu;
 mod display;
 
 /// Decides what the CPU should do after executing an instruction.
@@ -35,8 +37,8 @@ pub enum CpuAction {
 pub struct Arm7Tdmi {
     // Main register set.
     gpr: [i32; 16],
-    cpsr: CPSR,
-    spsr: [CPSR; 7],
+    cpsr: PSR,
+    spsr: [PSR; 7],
 
     // Pipeline implementation.
     decoded_arm: ArmInstruction,
@@ -86,8 +88,8 @@ impl Arm7Tdmi {
     pub fn new(bus: Rc<RefCell<Bus>>) -> Arm7Tdmi {
         Arm7Tdmi {
             gpr: [0; 16],
-            cpsr: CPSR::default(),
-            spsr: [CPSR::default(); 7],
+            cpsr: PSR::default(),
+            spsr: [PSR::default(); 7],
 
             decoded_arm: ArmInstruction::nop(),
             fetched_arm: ArmInstruction::NOP_RAW,
@@ -128,7 +130,7 @@ impl Arm7Tdmi {
     pub fn reset(&mut self) {
         self.gpr[Arm7Tdmi::PC] = 0;
 
-        self.cpsr = CPSR::default();
+        self.cpsr = PSR::default();
 
         self.mode = Mode::Supervisor;
         self.state = State::ARM;
@@ -184,8 +186,7 @@ impl Arm7Tdmi {
         self.fetched_thumb = ThumbInstruction::NOP_RAW;
     }
 
-    #[cfg_attr(feature="clippy", allow(inline_always))]
-    #[inline(always)]
+    #[inline]
     fn increment_pc(&mut self) {
         self.gpr[Arm7Tdmi::PC] = self.gpr[Arm7Tdmi::PC].wrapping_add(if self.state == State::ARM { 4 } else { 2 });
     }

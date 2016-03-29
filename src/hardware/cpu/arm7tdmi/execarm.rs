@@ -10,20 +10,11 @@ use super::*;
 use super::super::arminstruction::*;
 use super::super::super::error::*;
 
-// TODO clear pipeline in loop if PC_now != PC_prev
-
 impl Arm7Tdmi {
     /// Immediately executes a single ARM state instruction.
-    ///
-    /// # Params
-    /// - `inst`: The instruction to execute.
-    ///
-    /// # Returns
-    /// - `Ok` if executing the instruction succeeded.
-    /// - `Err` if trying to execute an ill-formed instruction.
     pub fn execute_arm_state(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         // TODO do research on when to flush the pipeline due to R15-writes
-        let do_exec = try!(inst.condition().check(&self.cpsr));
+        let do_exec: bool = try!(inst.condition().check(&self.cpsr));
         if !do_exec { return Ok(CpuAction::None); }
 
         match inst.opcode() {
@@ -202,12 +193,12 @@ impl Arm7Tdmi {
         if self.mode == Mode::User {
             // User mode can only set the flag bits of CPSR.
             if inst.is_accessing_spsr() { error!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
-            Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, rm);
+            self.cpsr.override_flags(rm);
         } else {
-            if inst.is_accessing_spsr() { Arm7Tdmi::override_psr(&mut self.spsr[self.mode as u8 as usize].0, rm); }
+            if inst.is_accessing_spsr() { self.spsr[self.mode as u8 as usize].override_non_reserved(rm); }
             else {
                 let s = self.cpsr.state();
-                Arm7Tdmi::override_psr(&mut self.cpsr.0, rm);
+                self.cpsr.override_non_reserved(rm);
                 if self.cpsr.state() != s { warn!("MSR_Reg changed the T bit!"); }
             }
             // Mode might have changed.
@@ -221,15 +212,12 @@ impl Arm7Tdmi {
         let op = inst.calculate_shsr_field(&self.gpr[..]) as u32;
         if inst.is_accessing_spsr() {
             if self.mode == Mode::User { error!("USR mode has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
-            Arm7Tdmi::override_psr_flags(&mut self.spsr[self.mode as u8 as usize].0, op);
+            self.spsr[self.mode as u8 as usize].override_flags(op);
         } else {
-            Arm7Tdmi::override_psr_flags(&mut self.cpsr.0, op);
+            self.cpsr.override_flags(op);
         }
         Ok(CpuAction::None)
     }
-
-    fn override_psr(psr: &mut u32, val: u32) { *psr = (val & CPSR::NON_RESERVED_MASK) | (*psr & !CPSR::NON_RESERVED_MASK); }
-    fn override_psr_flags(cpsr: &mut u32, val: u32) { *cpsr = (val & CPSR::FLAGS_MASK) | (*cpsr & !CPSR::FLAGS_MASK); }
 
     #[cfg_attr(feature="clippy", allow(collapsible_if))] // Better readability in this case.
     fn execute_ldr_str(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {

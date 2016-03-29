@@ -6,7 +6,7 @@
 #![warn(missing_docs)]
 
 use super::super::super::error::GbaError;
-use super::CPSR;
+use super::PSR;
 
 /// The condition field of an ARM instruction.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -39,7 +39,7 @@ impl ArmCondition {
     /// # Returns
     /// - `Ok`: `true` if the corresponding instruction should be executed, otherwise `false`.
     /// - `Err`: The condition field is `NV`, which is reserved in ARM7TDMI.
-    pub fn check(self, cpsr: &CPSR) -> Result<bool, GbaError> {
+    pub fn check(self, cpsr: &PSR) -> Result<bool, GbaError> {
         match self {
             ArmCondition::EQ => Ok( cpsr.Z() ),
             ArmCondition::NE => Ok(!cpsr.Z() ),

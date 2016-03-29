@@ -1,5 +1,5 @@
 // License below.
-//! Implements the *"Current Program Status Register"* (CPSR) of the ARM7TDMI.
+//! Implements the *"Program Status Register"* (PSR) of the ARM7TDMI.
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
@@ -37,131 +37,73 @@ impl Mode {
     /// Converts this mode into a CPSR bit pattern.
     pub fn as_bits(self) -> u32 {
         match self {
-            Mode::User       => CPSR::MODE_USER,
-            Mode::FIQ        => CPSR::MODE_FIQ,
-            Mode::IRQ        => CPSR::MODE_IRQ,
-            Mode::Supervisor => CPSR::MODE_SUPERVISOR,
-            Mode::Abort      => CPSR::MODE_ABORT,
-            Mode::Undefined  => CPSR::MODE_UNDEFINED,
-            Mode::System     => CPSR::MODE_SYSTEM
+            Mode::User       => PSR::MODE_USER,
+            Mode::FIQ        => PSR::MODE_FIQ,
+            Mode::IRQ        => PSR::MODE_IRQ,
+            Mode::Supervisor => PSR::MODE_SUPERVISOR,
+            Mode::Abort      => PSR::MODE_ABORT,
+            Mode::Undefined  => PSR::MODE_UNDEFINED,
+            Mode::System     => PSR::MODE_SYSTEM
         }
     }
 }
 
 
-/// The Current Program Status Register.
+/// The Program Status Register.
 #[derive(PartialEq, Clone, Copy)]
-pub struct CPSR(pub u32);
+pub struct PSR(pub u32);
 
-impl CPSR {
-    /// Used to initialise a PSR.
-    pub const RAW_DEFAULT: u32 = CPSR::MODE_SUPERVISOR
-                               | (1 << (CPSR::IRQ_DISABLE_BIT as u32))
-                               | (1 << (CPSR::FIQ_DISABLE_BIT as u32));
+impl PSR {
+    const RAW_DEFAULT: u32 = PSR::MODE_SUPERVISOR
+                           | (1 << (PSR::IRQ_DISABLE_BIT as u32))
+                           | (1 << (PSR::FIQ_DISABLE_BIT as u32));
 
-    /// Used to mask reserved bits away.
-    pub const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
-    //                                   NZCV                       IFTMMMMM
+    const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
+    //                               NZCV                       IFTMMMMM
 
-    /// Masks the flag bits of a PSR.
-    pub const FLAGS_MASK: u32 = 0xF0000000_u32;
+    const FLAGS_MASK: u32 = 0xF0000000_u32;
+    const N_FLAG_BIT: u32 = 31;
+    const Z_FLAG_BIT: u32 = 30;
+    const C_FLAG_BIT: u32 = 29;
+    const V_FLAG_BIT: u32 = 28;
 
-    /// Sign flag bit.
-    ///
-    /// 1 if signed, otherwise 0.
-    pub const SIGN_FLAG_BIT: u8 = 31;
+    const IRQ_DISABLE_BIT: u32 = 7;
+    const FIQ_DISABLE_BIT: u32 = 6;
 
-    /// Zero flag bit.
-    ///
-    /// 1 if zero, otherwise 0.
-    pub const ZERO_FLAG_BIT: u8 = 30;
+    const STATE_BIT: u32 = 5;
 
-    /// Carry flag bit.
-    ///
-    /// 1 if carry or no borrow, 0 if borrow or no carry.
-    pub const CARRY_FLAG_BIT: u8 = 29;
-
-    /// Overflow flag bit.
-    ///
-    /// 1 if overflow, otherwise 0.
-    pub const OVERFLOW_FLAG_BIT: u8 = 28;
-
-    /// IRQ disable bit.
-    ///
-    /// 1 if disabled, otherwise 0.
-    pub const IRQ_DISABLE_BIT: u8 = 7;
-
-    /// FIQ disable bit.
-    ///
-    /// 1 if disabled, otherwise 0.
-    pub const FIQ_DISABLE_BIT: u8 = 6;
-
-    /// State bit.
-    ///
-    /// 1 if THUMB, 0 if ARM.
-    pub const STATE_BIT: u8 = 5;
-
-    /// Mode bits mask.
-    ///
-    /// Used to get the mode bits only.
-    pub const MODE_MASK: u32 = 0b0001_1111;
-
-    /// Bit pattern for user mode.
-    pub const MODE_USER: u32 = 0b1_0000;
-
-    /// Bit pattern for FIQ mode.
-    pub const MODE_FIQ: u32 = 0b1_0001;
-
-    /// Bit pattern for IRQ mode.
-    pub const MODE_IRQ: u32 = 0b1_0010;
-
-    /// Bit pattern for supervisor mode.
-    pub const MODE_SUPERVISOR: u32 = 0b1_0011;
-
-    /// Bit pattern for abort mode.
-    pub const MODE_ABORT: u32 = 0b1_0111;
-
-    /// Bit pattern for undefined mode.
-    pub const MODE_UNDEFINED: u32 = 0b1_1011;
-
-    /// Bit pattern for system mode.
-    pub const MODE_SYSTEM: u32 = 0b1_1111;
+    const MODE_MASK:       u32 = 0b0001_1111;
+    const MODE_USER:       u32 = 0b1_0000;
+    const MODE_FIQ:        u32 = 0b1_0001;
+    const MODE_IRQ:        u32 = 0b1_0010;
+    const MODE_SUPERVISOR: u32 = 0b1_0011;
+    const MODE_ABORT:      u32 = 0b1_0111;
+    const MODE_UNDEFINED:  u32 = 0b1_1011;
+    const MODE_SYSTEM:     u32 = 0b1_1111;
 
 
     /// Clears all reserved bits.
     pub fn clear_reserved_bits(&mut self) {
-        self.0 &= CPSR::NON_RESERVED_MASK;
-    }
-
-    /// Get the condition bits.
-    ///
-    /// # Returns
-    /// The condition bits are laid out as such:
-    /// ```
-    /// 0b0000
-    /// //NZCV
-    /// ```
-    pub fn condition_bits(&self) -> u32 {
-        (self.0 as u32) >> CPSR::OVERFLOW_FLAG_BIT
+        self.0 &= PSR::NON_RESERVED_MASK;
     }
 
     /// Converts the state bit to a state enum.
     pub fn state(&self) -> State {
-        unsafe { mem::transmute(((self.0 >> CPSR::STATE_BIT) & 1) as u8) }
+        unsafe { mem::transmute(((self.0 >> PSR::STATE_BIT) & 1) as u8) }
     }
 
     /// Converts the mode bit pattern to a mode enum.
     pub fn mode(&self) -> Mode {
-        match self.0 & CPSR::MODE_MASK {
-            CPSR::MODE_USER       => Mode::User,
-            CPSR::MODE_FIQ        => Mode::FIQ,
-            CPSR::MODE_IRQ        => Mode::IRQ,
-            CPSR::MODE_SUPERVISOR => Mode::Supervisor,
-            CPSR::MODE_ABORT      => Mode::Abort,
-            CPSR::MODE_UNDEFINED  => Mode::Undefined,
-            CPSR::MODE_SYSTEM     => Mode::System,
+        match self.0 & PSR::MODE_MASK {
+            PSR::MODE_USER       => Mode::User,
+            PSR::MODE_FIQ        => Mode::FIQ,
+            PSR::MODE_IRQ        => Mode::IRQ,
+            PSR::MODE_SUPERVISOR => Mode::Supervisor,
+            PSR::MODE_ABORT      => Mode::Abort,
+            PSR::MODE_UNDEFINED  => Mode::Undefined,
+            PSR::MODE_SYSTEM     => Mode::System,
             _ => {
-                error!("CPSR: Unrecognised mode bit pattern {:#010b}.", self.0 & CPSR::MODE_MASK);
+                error!("PSR: Unrecognised mode bit pattern {:#010b}.", self.0 & PSR::MODE_MASK);
                 panic!("Aborting due to illegal mode bits.");
             },
         }
@@ -170,85 +112,95 @@ impl CPSR {
     /// Sets or clears the state bit
     /// depending on the new state.
     pub fn set_state(&mut self, s: State) {
-        self.0 &= !(1 << CPSR::STATE_BIT);
-        self.0 |= (s as u8 as u32) << CPSR::STATE_BIT;
+        self.0 &= !(1 << PSR::STATE_BIT);
+        self.0 |=  (s as u8 as u32) << PSR::STATE_BIT;
     }
 
     /// Sets or clears the mode bits
     /// depending on the new mode.
     pub fn set_mode(&mut self, m: Mode) {
-        self.0 &= !CPSR::MODE_MASK;
-        self.0 |= m.as_bits();
+        self.0 &= !PSR::MODE_MASK;
+        self.0 |=  m.as_bits();
     }
 
     /// Sets the IRQ disable bit.
     pub fn disable_irq(&mut self) {
-        self.0 |= 1 << CPSR::IRQ_DISABLE_BIT;
+        self.0 |= 1 << PSR::IRQ_DISABLE_BIT;
     }
 
     /// Sets the FIQ disable bit.
     pub fn disable_fiq(&mut self) {
-        self.0 |= 1 << CPSR::FIQ_DISABLE_BIT;
+        self.0 |= 1 << PSR::FIQ_DISABLE_BIT;
     }
 
     /// Clears the IRQ disable bit.
     pub fn enable_irq(&mut self) {
-        self.0 &= !(1 << CPSR::IRQ_DISABLE_BIT);
+        self.0 &= !(1 << PSR::IRQ_DISABLE_BIT);
     }
 
     /// Clears the FIQ disable bit.
     pub fn enable_fiq(&mut self) {
-        self.0 &= !(1 << CPSR::FIQ_DISABLE_BIT);
+        self.0 &= !(1 << PSR::FIQ_DISABLE_BIT);
     }
 
     /// Gets the current state of the IRQ disable bit.
     pub fn irq_disabled(&self) -> bool {
-        0 != (self.0 & (1 << CPSR::IRQ_DISABLE_BIT))
+        0 != (self.0 & (1 << PSR::IRQ_DISABLE_BIT))
     }
 
     /// Gets the current state of the FIQ disable bit.
     pub fn fiq_disabled(&self) -> bool {
-        0 != (self.0 & (1 << CPSR::FIQ_DISABLE_BIT))
+        0 != (self.0 & (1 << PSR::FIQ_DISABLE_BIT))
     }
 
     /// Gets the current state of the N bit.
     #[allow(non_snake_case)]
-    pub fn N(self) -> bool { 0 != (self.0 & (1 << 31)) }
+    pub fn N(self) -> bool { 0 != (self.0 & (1 << PSR::N_FLAG_BIT)) }
 
     /// Gets the current state of the Z bit.
     #[allow(non_snake_case)]
-    pub fn Z(self) -> bool { 0 != (self.0 & (1 << 30)) }
+    pub fn Z(self) -> bool { 0 != (self.0 & (1 << PSR::Z_FLAG_BIT)) }
 
     /// Gets the current state of the C bit.
     #[allow(non_snake_case)]
-    pub fn C(self) -> bool { 0 != (self.0 & (1 << 29)) }
+    pub fn C(self) -> bool { 0 != (self.0 & (1 << PSR::C_FLAG_BIT)) }
 
     /// Gets the current state of the V bit.
     #[allow(non_snake_case)]
-    pub fn V(self) -> bool { 0 != (self.0 & (1 << 28)) }
+    pub fn V(self) -> bool { 0 != (self.0 & (1 << PSR::V_FLAG_BIT)) }
 
     /// Set the new state of the N bit.
     #[allow(non_snake_case)]
-    pub fn set_N(&mut self, n: bool) { if n { self.0 |= 1 << 31; } else { self.0 &= !(1 << 31); } }
+    pub fn set_N(&mut self, n: bool) { self.0 = (self.0 & !(1 << PSR::N_FLAG_BIT)) | ((n as u32) << PSR::N_FLAG_BIT); }
 
     /// Set the new state of the Z bit.
     #[allow(non_snake_case)]
-    pub fn set_Z(&mut self, n: bool) { if n { self.0 |= 1 << 30; } else { self.0 &= !(1 << 30); } }
+    pub fn set_Z(&mut self, n: bool) { self.0 = (self.0 & !(1 << PSR::Z_FLAG_BIT)) | ((n as u32) << PSR::Z_FLAG_BIT); }
 
     /// Set the new state of the C bit.
     #[allow(non_snake_case)]
-    pub fn set_C(&mut self, n: bool) { if n { self.0 |= 1 << 29; } else { self.0 &= !(1 << 29); } }
+    pub fn set_C(&mut self, n: bool) { self.0 = (self.0 & !(1 << PSR::C_FLAG_BIT)) | ((n as u32) << PSR::C_FLAG_BIT); }
 
     /// Set the new state of the V bit.
     #[allow(non_snake_case)]
-    pub fn set_V(&mut self, n: bool) { if n { self.0 |= 1 << 28; } else { self.0 &= !(1 << 28); } }
+    pub fn set_V(&mut self, n: bool) { self.0 = (self.0 & !(1 << PSR::V_FLAG_BIT)) | ((n as u32) << PSR::V_FLAG_BIT); }
+
+    /// Overrides the PSR without modifying reserved bits.
+    pub fn override_non_reserved(&mut self, x: u32) {
+        self.0 = (x & PSR::NON_RESERVED_MASK) | (self.0 & !PSR::NON_RESERVED_MASK)
+    }
+
+    /// Overrides the flag bits of the PSR by masking the given value.
+    pub fn override_flags(&mut self, x: u32) {
+        self.0 = (x & PSR::FLAGS_MASK) | (self.0 & !PSR::FLAGS_MASK)
+    }
 }
 
-impl Default for CPSR {
-    fn default() -> CPSR { CPSR(CPSR::RAW_DEFAULT) }
+impl Default for PSR {
+    fn default() -> PSR { PSR(PSR::RAW_DEFAULT) }
 }
 
-impl fmt::Display for CPSR {
+impl fmt::Display for PSR {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[{n}{z}{c}{v} {i}{f} {s} {m}]",
             n = if self.N() { 'N' } else { 'n' },
