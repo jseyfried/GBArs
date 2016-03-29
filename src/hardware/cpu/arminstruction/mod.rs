@@ -80,11 +80,10 @@ use std::mem;
 
 use super::super::error::GbaError;
 use super::arm7tdmi::{Arm7Tdmi, ArmCondition};
+use super::arm7tdmi::alu::armdpop::ArmDPOP;
 
-pub use self::armdpop::*;
 pub use self::display::*;
 
-mod armdpop;
 mod display;
 
 #[cfg(test)]

@@ -21,10 +21,10 @@ pub use self::display::*;
 
 pub mod exception;
 pub mod psr;
+pub mod alu;
 pub mod armcondition;
 
 mod execarm;
-mod alu;
 mod display;
 
 /// Decides what the CPU should do after executing an instruction.
