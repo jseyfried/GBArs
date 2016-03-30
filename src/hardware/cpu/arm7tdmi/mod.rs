@@ -14,17 +14,15 @@ use super::super::error::*;
 
 pub use self::exception::*;
 pub use self::psr::*;
-pub use self::alu::*;
+pub use self::exec::*;
 pub use self::armcondition::*;
-pub use self::execarm::*;
 pub use self::display::*;
 
 pub mod exception;
 pub mod psr;
-pub mod alu;
+pub mod exec;
 pub mod armcondition;
 
-mod execarm;
 mod display;
 
 /// Decides what the CPU should do after executing an instruction.

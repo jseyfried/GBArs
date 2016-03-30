@@ -20,7 +20,7 @@
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![feature(box_syntax, associated_consts, test)]
-#![warn(missing_docs)]
+#![warn(missing_docs, trivial_casts, trivial_numeric_casts)]
 
 #[macro_use]
 extern crate log;

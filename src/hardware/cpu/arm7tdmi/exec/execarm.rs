@@ -6,9 +6,9 @@
 #![warn(missing_docs)]
 
 use std::u32;
-use super::*;
-use super::super::arminstruction::*;
-use super::super::super::error::*;
+use super::super::*;
+use super::super::super::arminstruction::*;
+use super::super::super::super::error::*;
 
 impl Arm7Tdmi {
     /// Immediately executes a single ARM state instruction.
@@ -98,84 +98,25 @@ impl Arm7Tdmi {
 
     fn execute_data_processing(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
         if inst.is_setting_flags() { return self.execute_data_processing_s(inst); }
+        let op1: i32 = self.gpr[inst.Rn()];
         let op2: i32 = inst.calculate_shft_field(&self.gpr[..], self.cpsr.C());
-        let rn: i32 = self.gpr[inst.Rn()];
-        let c: i32 = if self.cpsr.C() { 1 } else { 0 };
-
-        self.gpr[inst.Rd()] = match inst.dpop() {
-            ArmDPOP::AND => { rn & op2 },
-            ArmDPOP::EOR => { rn ^ op2 },
-            ArmDPOP::SUB => { rn.wrapping_sub(op2) },
-            ArmDPOP::RSB => { op2.wrapping_sub(rn) },
-            ArmDPOP::ADD => { rn.wrapping_add(op2) },
-            ArmDPOP::ADC => { rn.wrapping_add(op2).wrapping_add(c) },
-            ArmDPOP::SBC => { rn.wrapping_sub(op2).wrapping_sub(1-c) },
-            ArmDPOP::RSC => { op2.wrapping_sub(rn).wrapping_sub(1-c) },
-            ArmDPOP::TST => panic!("TST that should be MSR/MRS!"),
-            ArmDPOP::TEQ => panic!("TEQ that should be MSR/MRS!"),
-            ArmDPOP::CMP => panic!("CMP that should be MSR/MRS!"),
-            ArmDPOP::CMN => panic!("CMN that should be MSR/MRS!"),
-            ArmDPOP::ORR => { rn | op2 },
-            ArmDPOP::MOV => { op2 },
-            ArmDPOP::BIC => { rn & !op2 },
-            ArmDPOP::MVN => { !op2 },
-        };
-
+        self.gpr[inst.Rd()] = self.alu_data_processing(inst.dpop(), op1, op2);
         Ok(if inst.Rd() == Arm7Tdmi::PC { CpuAction::FlushPipeline } else { CpuAction::None })
     }
 
     fn execute_data_processing_s(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {
+        let  op1         = self.gpr[inst.Rn()];
         let (op2, cshft) = inst.calculate_shft_field_with_carry(&self.gpr[..], self.cpsr.C());
-        let rn = self.gpr[inst.Rn()];
-        let c = if self.cpsr.C() { 1 } else { 0 }; // TODO cshft or CPSR.C?
-        let op = inst.dpop();
-        let mut cf = false;
-        let mut vf = false;
+        let  res         = self.alu_data_processing_flags(inst.dpop(), op1, op2, cshft);
 
-        let rd: i32 = match op {
-            ArmDPOP::AND | ArmDPOP::TST => { rn & op2 },
-            ArmDPOP::EOR | ArmDPOP::TEQ => { rn ^ op2 },
-            ArmDPOP::SUB | ArmDPOP::CMP => { Arm7Tdmi::sub_carry_overflow(rn, op2, &mut cf, &mut vf) },
-            ArmDPOP::RSB                => { Arm7Tdmi::sub_carry_overflow(op2, rn, &mut cf, &mut vf) },
-            ArmDPOP::ADD | ArmDPOP::CMN => { Arm7Tdmi::add_carry_overflow(rn, op2, &mut cf, &mut vf) },
-            ArmDPOP::ADC                => { Arm7Tdmi::add_carry_overflow(rn, op2.wrapping_add(c), &mut cf, &mut vf) },
-            ArmDPOP::SBC                => { Arm7Tdmi::sub_carry_overflow(rn, op2.wrapping_sub(1-c), &mut cf, &mut vf) },
-            ArmDPOP::RSC                => { Arm7Tdmi::sub_carry_overflow(op2, rn.wrapping_sub(1-c), &mut cf, &mut vf) },
-            ArmDPOP::ORR                => { rn | op2 },
-            ArmDPOP::MOV                => { op2 },
-            ArmDPOP::BIC                => { rn & !op2 },
-            ArmDPOP::MVN                => { !op2 },
-        };
+        if let Some(x) = res { self.gpr[inst.Rd()] = x; }
 
-        if inst.Rd() == Arm7Tdmi::PC {
+        if inst.Rd() == Arm7Tdmi::PC { // FIXME really error or just ignore?
+            if self.mode == Mode::User { error!("USR has no SPSR."); return Err(GbaError::PrivilegedUserCode); }
             self.cpsr = self.spsr[self.mode as u8 as usize];
-        } else {
-            self.cpsr.set_N(rd < 0);
-            self.cpsr.set_Z(rd == 0);
-            if op.is_logical() {
-                self.cpsr.set_C(cshft);
-            } else {
-                self.cpsr.set_C(cf);
-                self.cpsr.set_V(vf);
-            }
         }
 
-        if !op.is_test() { self.gpr[inst.Rd()] = rd; }
         Ok(if inst.Rd() == Arm7Tdmi::PC { CpuAction::FlushPipeline } else { CpuAction::None })
-    }
-    fn add_carry_overflow(a: i32, b: i32, c: &mut bool, v: &mut bool) -> i32 {
-        let res64: u64 = (a as u32 as u64).wrapping_add(b as u32 as u64);
-        *c = 0 != (res64 & (1 << 32));
-        let x = a.overflowing_add(b);
-        *v = x.1;
-        x.0
-    }
-    fn sub_carry_overflow(a: i32, b: i32, c: &mut bool, v: &mut bool) -> i32 {
-        let res64: u64 = (a as u32 as u64).wrapping_sub(b as u32 as u64);
-        *c = 0 != (res64 & (1 << 32));
-        let x = a.overflowing_sub(b);
-        *v = x.1;
-        x.0
     }
 
     fn execute_mrs(&mut self, inst: ArmInstruction) -> Result<CpuAction, GbaError> {

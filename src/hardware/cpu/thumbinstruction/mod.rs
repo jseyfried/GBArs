@@ -170,6 +170,10 @@ impl ThumbInstruction {
     #[allow(non_snake_case)]
     pub fn Hs(&self) -> usize { self.Rs() | (((self.raw >> 4) & 0b1000) as usize) } // Bit 7 = Hs/Rs
 
+    /// To be used with the `AddSub` opcode.
+    #[allow(non_snake_case)]
+    pub fn Rn_is_immediate(&self) -> bool { 0 != (self.raw & (1 << 10)) }
+
     /// Determines by how many bits a register value should be shifted.
     pub fn shift_operand(&self) -> u32 { ((self.raw >> 6) & 0b1_1111) as u32 }
 }

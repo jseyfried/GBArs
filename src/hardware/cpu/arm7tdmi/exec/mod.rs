@@ -8,8 +8,10 @@
 use super::*;
 
 pub use self::armdpop::*;
+pub use self::execarm::*;
 
 pub mod armdpop;
+pub mod execarm;
 
 impl Arm7Tdmi {
     fn alu_data_processing(&mut self, dpop: ArmDPOP, op1: i32, op2: i32) -> i32 {
@@ -37,7 +39,7 @@ impl Arm7Tdmi {
     fn alu_data_processing_flags(&mut self, dpop: ArmDPOP, op1: i32, op2: i32, shift_carry: bool) -> Option<i32> {
         let c = self.cpsr.C() as i32;
         let mut cf = shift_carry;
-        let mut vf = self.cpsr.V();
+        let mut vf = self.cpsr.V(); // Emulate "not touching V" by writing back "old V".
 
         let res: i32 = match dpop {
             ArmDPOP::AND | ArmDPOP::TST => { op1 & op2 },
@@ -54,6 +56,7 @@ impl Arm7Tdmi {
             ArmDPOP::MVN                => { !op2 },
         };
 
+        // PSR transfer will override this in the caller.
         self.cpsr.set_N(res < 0);
         self.cpsr.set_Z(res == 0);
         self.cpsr.set_C(cf);
