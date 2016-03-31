@@ -36,10 +36,21 @@ impl fmt::Display for Arm7Tdmi {
 }
 
 impl Arm7Tdmi {
-    const REGISTER_NAMES: &'static [&'static str] = &[
+    const DEBUG_REGISTER_NAMES: &'static [&'static str] = &[
         "R0:  ", "R1:  ", "R2:  ", "R3:  ", "R4:  ", "R5:  ", "R6:  ", "R7:  ",
         "R8:  ", "R9:  ", "R10: ", "R11: ", "R12: ", "SP:  ", "LR:  ", "PC:  "
     ];
+
+    const REGISTER_NAMES: &'static [&'static str] = &[
+        "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+        "R8", "R9", "R10", "R11", "R12", "SP", "LR", "PC"
+    ];
+
+    /// Get the name corresponding to a given register index.
+    pub fn register_name(i: usize) -> &'static str {
+        debug_assert!(i < Arm7Tdmi::REGISTER_NAMES.len());
+        Arm7Tdmi::REGISTER_NAMES[i]
+    }
 }
 
 

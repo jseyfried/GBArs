@@ -8,9 +8,11 @@
 use super::*;
 
 pub use self::armdpop::*;
+pub use self::armbsop::*;
 pub use self::execarm::*;
 
 pub mod armdpop;
+pub mod armbsop;
 pub mod execarm;
 
 impl Arm7Tdmi {

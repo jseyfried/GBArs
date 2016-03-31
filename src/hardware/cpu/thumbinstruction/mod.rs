@@ -8,8 +8,9 @@
 //! Full Instructions:
 //!     .... ....  .... ....
 //!     0001 1IA<  N><S ><D> | Add/Sub, Rd = Rs OP(A) Rn
-//!     000o pxxx  xx<S ><D> | Move Shift, Rd = Rs SHIFT(op) xxxxx
+//!     000o p_im  m_<S ><D> | Move Shift, Rd = Rs SHIFT(op) _imm_
 //!     001o p<M>  imm_ imm_ | Data Processing, Rm = Rm OP(op) imm_imm_
+//!     0100 0011  01<S ><D> | MUL Rd, Rs
 //!     0100 00_o  p_<S ><D> | ALU Operation, Rd = Rd OP(_op_) Rs
 //!     0100 01op  hH<S ><D> | Hi-Reg Op / BX, Rd/Hd = Rd/Hd OP(op) Rs/Hs
 //!     0100 1<M>  imm_ imm_ | LDR Rm, [PC, #imm_imm_00]
@@ -46,17 +47,20 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
+use std::mem;
 use super::super::error::*;
+use super::arm7tdmi::exec::armdpop::*;
+use super::arm7tdmi::exec::armbsop::*;
 
 
-/// A decoded THUMB shift operation.
-#[allow(non_snake_case)]
+/// A decoded THUMB high register operation.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
-pub enum ShiftOp {
-    #[doc = "Logical Shift Left"]     LSL = 0,
-    #[doc = "Logical Shift Right"]    LSR = 1,
-    #[doc = "Arithmetic Shift Right"] ASR = 2,
+pub enum HiRegisterOp {
+    #[doc = "ADD without modifying CPSR flags."]    AddNoFlags = 0,
+    #[doc = "CMP which always updates CPSR flags."] CmpFlags   = 1,
+    #[doc = "MOV without modifying CPSR flags."]    MovNoFlags = 2,
+    #[doc = "BX by register Rs/Hs."]                BxRsHs     = 3,
 }
 
 
@@ -66,6 +70,7 @@ pub enum ThumbOpcode {
     #[doc = "ADD/SUB with an immediate value or register."] AddSub,
     #[doc = "Shifted register transfer."]                   MoveShiftedReg,
     #[doc = "ALU operations updating CPSR flags."]          DataProcessingFlags,
+    #[doc = "MUL with updating CPSR flags."]                AluMul,
     #[doc = "ALU Operations."]                              AluOperation,
     #[doc = "ALU operations with high registers or BX."]    HiRegOpBx,
     #[doc = "LDR relative to PC."]                          LdrPcImm,
@@ -114,6 +119,7 @@ impl ThumbInstruction {
              if (raw & 0xF800) == 0x1800 { ThumbOpcode::AddSub }
         else if (raw & 0xE000) == 0x0000 { ThumbOpcode::MoveShiftedReg }
         else if (raw & 0xE000) == 0x2000 { ThumbOpcode::DataProcessingFlags }
+        else if (raw & 0xFFC0) == 0x4340 { ThumbOpcode::AluMul } // Decoded separately as MUL is no ARM state data processing.
         else if (raw & 0xFC00) == 0x4000 { ThumbOpcode::AluOperation }
         else if (raw & 0xFC00) == 0x4400 { ThumbOpcode::HiRegOpBx }
         else if (raw & 0xF800) == 0x4800 { ThumbOpcode::LdrPcImm }
@@ -176,6 +182,98 @@ impl ThumbInstruction {
 
     /// Determines by how many bits a register value should be shifted.
     pub fn shift_operand(&self) -> u32 { ((self.raw >> 6) & 0b1_1111) as u32 }
+
+    /// Extracts a 5-bit positive immediate value.
+    pub fn imm5(&self) -> i32 { ((self.raw >> 6) & 0b1_1111) as i32 }
+
+    /// Extracts an 8-bit positive immediate value.
+    pub fn imm8(&self) -> i32 { (self.raw & 0xFF) as i32 }
+
+    /// Extracts a 10-bit positive immediate value.
+    pub fn imm10(&self) -> i32 { ((self.raw & 0xFF) << 2) as i32 }
+
+    /// Extracts a 9-bit signed offset value.
+    pub fn offs9(&self) -> i32 { ((((self.raw & 0xFF) as u32) << 24) as i32) >> 23 }
+
+    /// Extracts a 10-bit signed offset value.
+    pub fn offs10(&self) -> i32 { ((((self.raw & 0xFF) as u32) << 24) as i32) >> 22 }
+
+    /// Extracts a 12-bit signed offset value.
+    pub fn offs12(&self) -> i32 { ((((self.raw & 0x7FF) as u32) << 21) as i32) >> 20 }
+
+    /// Extracts a raw 11-bit number for long 23-bit offset branches.
+    pub fn long_offs_part(&self) -> i32 { (self.raw & 0x7FF) as i32 }
+
+    /// Extracts the comment field of a SWI instruction.
+    pub fn comment(&self) -> u8 { (self.raw & 0xFF) as u8 }
+
+    /// Extracts a data processing opcode for the `AddSub` instruction.
+    #[allow(non_snake_case)]
+    pub fn dpop_AddSub(&self) -> ArmDPOP { if 0 != (self.raw & (1 << 9)) { ArmDPOP::ADD } else { ArmDPOP::SUB } }
+
+    /// Extracts a barrel shifter opcode for the `MoveShiftedReg` instruction.
+    #[allow(non_snake_case)]
+    pub fn bsop_MoveShiftedReg(&self) -> ArmBSOP { ArmBSOP::decode_immediate((self.raw >> 11) as u32, self.imm5() as u32) }
+
+    /// Extracts a data processing opcode for the `DataProcessingFlags` instruction.
+    #[allow(non_snake_case)]
+    pub fn dpop_DataProcessingFlags(&self) -> ArmDPOP {
+        match (self.raw >> 11) & 0b11 {
+            0 => ArmDPOP::MOV,
+            1 => ArmDPOP::CMP,
+            2 => ArmDPOP::ADD,
+            3 => ArmDPOP::SUB,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Extracts data processing and barrel shifter opcodes for the `AluOperation` instruction.
+    #[allow(non_snake_case)]
+    pub fn dpop_bsop_AluOperation(&self) -> (ArmDPOP, ArmBSOP) {
+        match (self.raw >> 6) & 0b1111 {
+             0 => (ArmDPOP::AND, ArmBSOP::NOP),
+             1 => (ArmDPOP::EOR, ArmBSOP::NOP),
+             2 => (ArmDPOP::MOV, ArmBSOP::LSL_Reg(self.Rs())),
+             3 => (ArmDPOP::MOV, ArmBSOP::LSR_Reg(self.Rs())),
+             4 => (ArmDPOP::MOV, ArmBSOP::ASR_Reg(self.Rs())),
+             5 => (ArmDPOP::ADC, ArmBSOP::NOP),
+             6 => (ArmDPOP::SBC, ArmBSOP::NOP),
+             7 => (ArmDPOP::MOV, ArmBSOP::ROR_Reg(self.Rs())),
+             8 => (ArmDPOP::TST, ArmBSOP::NOP),
+             9 => (ArmDPOP::RSB, ArmBSOP::NOP), // FIXME NEG a, b => RSB a, b, #0 (Where does 0 come from?!)
+            10 => (ArmDPOP::CMP, ArmBSOP::NOP),
+            11 => (ArmDPOP::CMN, ArmBSOP::NOP),
+            12 => (ArmDPOP::ORR, ArmBSOP::NOP),
+            13 => panic!("Decoded AluOperation instead of AluMul!"),
+            14 => (ArmDPOP::BIC, ArmBSOP::NOP),
+            15 => (ArmDPOP::MVN, ArmBSOP::NOP),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Extracts a high register operation code for the `HiRegOpBx` instruction.
+    #[allow(non_snake_case)]
+    pub fn op_HiRegOpBx(&self) -> HiRegisterOp { unsafe { mem::transmute(((self.raw >> 8) & 0b11) as u8) } }
+
+    /// Checks whether the given instruction is a load or store instruction.
+    pub fn is_load(&self) -> bool { 0 != (self.raw & (1 << 11)) }
+
+    /// Checks whether the given load/store instruction transfers a single byte.
+    pub fn is_transfering_bytes(&self) -> bool { 0 != (self.raw & (1 << 10)) }
+
+    /// Checks whether this is an LDRH instruction.
+    pub fn is_load_halfword(&self) -> bool { self.is_load() }
+
+    /// Checks whether this load/store instruction transfers signed data.
+    pub fn is_signed(&self) -> bool { self.is_transfering_bytes() }
+
+    /// Checks whether an address calculation instruction uses SP or PC.
+    #[allow(non_snake_case)]
+    pub fn is_base_SP(&self) -> bool { self.is_load() }
+
+    /// Checks whether a PUSH/POP instruction does what this function's name implies.
+    #[allow(non_snake_case)]
+    pub fn is_storing_LR_loading_PC(&self) -> bool { 0 != (self.raw & (1 << 8)) }
 }
 
 
