@@ -15,13 +15,11 @@ use super::super::error::*;
 pub use self::exception::*;
 pub use self::psr::*;
 pub use self::exec::*;
-pub use self::armcondition::*;
 pub use self::display::*;
 
 pub mod exception;
 pub mod psr;
 pub mod exec;
-pub mod armcondition;
 
 mod display;
 

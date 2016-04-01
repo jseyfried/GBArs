@@ -10,9 +10,11 @@ use super::*;
 pub use self::armdpop::*;
 pub use self::armbsop::*;
 pub use self::execarm::*;
+pub use self::armcondition::*;
 
 pub mod armdpop;
 pub mod armbsop;
+pub mod armcondition;
 pub mod execarm;
 
 impl Arm7Tdmi {

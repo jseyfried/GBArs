@@ -8,25 +8,25 @@
 //! Full Instructions:
 //!     .... ....  .... ....
 //!     0001 1IA<  N><S ><D> | Add/Sub, Rd = Rs OP(A) Rn
-//!     000o p_im  m_<S ><D> | Move Shift, Rd = Rs SHIFT(op) _imm_
-//!     001o p<M>  imm_ imm_ | Data Processing, Rm = Rm OP(op) imm_imm_
+//!     000o p_im  m_<S ><D> | Move Shift, Rd = Rs SHIFT(op) #_imm_
+//!     001o p<M>  imm_ imm_ | Data Processing, Rm = Rm OP(op) #imm_imm_
 //!     0100 0011  01<S ><D> | MUL Rd, Rs
 //!     0100 00_o  p_<S ><D> | ALU Operation, Rd = Rd OP(_op_) Rs
 //!     0100 01op  hH<S ><D> | Hi-Reg Op / BX, Rd/Hd = Rd/Hd OP(op) Rs/Hs
 //!     0100 1<M>  imm_ imm_ | LDR Rm, [PC, #imm_imm_00]
 //!     0101 LB0<  N><S ><D> | LDR/STR Rd, [Rs, Rn]
 //!     0101 WS1<  N><S ><D> | LDRH/STRH Rd, [Rs, Rn]
-//!     011b L_im  m_<S ><D> | LDR/STR Rd, [Rs, _imm_]
-//!     1000 L_im  m_<S ><D> | LDRH/STRH Rd, [Rs, _imm_]
-//!     1001 L<M>  imm_ imm_ | LDR/STR Rm, [SP, imm_imm_00]
-//!     1010 P<M>  imm_ imm_ | ADD Rm, PC/SP, imm_imm_00
-//!     1011 0000  offs offs | ADD SP, SP, SignExtend(offsoffs00)
+//!     011b L_im  m_<S ><D> | LDR/STR Rd, [Rs, #_imm_]
+//!     1000 L_im  m_<S ><D> | LDRH/STRH Rd, [Rs, #_imm_]
+//!     1001 L<M>  imm_ imm_ | LDR/STR Rm, [SP, #imm_imm_00]
+//!     1010 P<M>  imm_ imm_ | ADD Rm, PC/SP, #imm_imm_00
+//!     1011 0000  offs offs | ADD SP, SP, #SignExtend(offsoffs0)
 //!     1011 L10R  regs regs | PUSH/POP regsregs
 //!     1100 L<M>  regs regs | LDM/STM Rm, regsregs
 //!     1101 1111  comm ent_ | SWI comment_
-//!     1101 cond  offs offs | B{cond} SignExtend(offsoffs0)
-//!     1110 0off  offs offs | B SignExtend(offoffsoffs0)
-//!     1111 Xoff  offs offs | BL Offset23Bit
+//!     1101 cond  offs offs | B{cond} #SignExtend(offsoffs0)
+//!     1110 0off  offs offs | B #SignExtend(offoffsoffs0)
+//!     1111 Xoff  offs offs | BL #Offset23Bit
 //!
 //! Bit Flags:
 //!     I: 1=RnImmediateOperand, 0=RnRegisterOperand
@@ -48,9 +48,14 @@
 #![warn(missing_docs)]
 
 use std::mem;
+use super::armcondition::*;
 use super::super::error::*;
 use super::arm7tdmi::exec::armdpop::*;
 use super::arm7tdmi::exec::armbsop::*;
+
+pub use self::display::*;
+
+pub mod display;
 
 
 /// A decoded THUMB high register operation.
@@ -61,6 +66,16 @@ pub enum HiRegisterOp {
     #[doc = "CMP which always updates CPSR flags."] CmpFlags   = 1,
     #[doc = "MOV without modifying CPSR flags."]    MovNoFlags = 2,
     #[doc = "BX by register Rs/Hs."]                BxRsHs     = 3,
+}
+
+/// A decoded THUMB halfword and signed data transfer operation.
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum LdrhStrhOp {
+    #[doc = "Store halfword."]         STRH = 0,
+    #[doc = "Load unsigned halfword."] LDRH = 1,
+    #[doc = "Load signed byte."]       LDSB = 2,
+    #[doc = "Load signed halfword."]   LDSH = 3,
 }
 
 
@@ -133,6 +148,7 @@ impl ThumbInstruction {
         else if (raw & 0xF600) == 0xB400 { ThumbOpcode::PushPopRegs }
         else if (raw & 0xF000) == 0xC000 { ThumbOpcode::LdmStmRegs }
         else if (raw & 0xFF00) == 0xDF00 { ThumbOpcode::SoftwareInterrupt }
+        else if (raw & 0xFF00) == 0xDE00 { return Err(GbaError::InvalidThumbInstruction(raw)); } // BAL is undefined.
         else if (raw & 0xF000) == 0xD000 { ThumbOpcode::BranchConditionOffs }
         else if (raw & 0xF800) == 0xE000 { ThumbOpcode::BranchOffs }
         else if (raw & 0xF000) == 0xF000 { ThumbOpcode::BranchLongOffs }
@@ -176,21 +192,23 @@ impl ThumbInstruction {
     #[allow(non_snake_case)]
     pub fn Hs(&self) -> usize { self.Rs() | (((self.raw >> 4) & 0b1000) as usize) } // Bit 7 = Hs/Rs
 
-    /// To be used with the `AddSub` opcode.
-    #[allow(non_snake_case)]
-    pub fn Rn_is_immediate(&self) -> bool { 0 != (self.raw & (1 << 10)) }
-
     /// Determines by how many bits a register value should be shifted.
     pub fn shift_operand(&self) -> u32 { ((self.raw >> 6) & 0b1_1111) as u32 }
 
     /// Extracts a 5-bit positive immediate value.
     pub fn imm5(&self) -> i32 { ((self.raw >> 6) & 0b1_1111) as i32 }
 
+    /// Extracts a 6-bit positive immediate value.
+    pub fn imm6(&self) -> i32 { self.imm5() << 1 }
+
+    /// Extracts a 7-bit positive immediate value.
+    pub fn imm7(&self) -> i32 { self.imm5() << 2 }
+
     /// Extracts an 8-bit positive immediate value.
     pub fn imm8(&self) -> i32 { (self.raw & 0xFF) as i32 }
 
     /// Extracts a 10-bit positive immediate value.
-    pub fn imm10(&self) -> i32 { ((self.raw & 0xFF) << 2) as i32 }
+    pub fn imm10(&self) -> i32 { self.imm8() << 2 }
 
     /// Extracts a 9-bit signed offset value.
     pub fn offs9(&self) -> i32 { ((((self.raw & 0xFF) as u32) << 24) as i32) >> 23 }
@@ -255,14 +273,22 @@ impl ThumbInstruction {
     #[allow(non_snake_case)]
     pub fn op_HiRegOpBx(&self) -> HiRegisterOp { unsafe { mem::transmute(((self.raw >> 8) & 0b11) as u8) } }
 
+    /// Extracts an opcode for the `LdrhStrhReg` instruction.
+    #[allow(non_snake_case)]
+    pub fn op_LdrhStrhReg(&self) -> LdrhStrhOp { unsafe { mem::transmute(((self.raw >> 10) & 0b11) as u8) } }
+
+    /// Extracts the condition code of a branch instruction.
+    pub fn condition(&self) -> ArmCondition { unsafe { mem::transmute(((self.raw >> 8) & 0xFF) as u8) } }
+
+    /// To be used with the `AddSub` opcode.
+    #[allow(non_snake_case)]
+    pub fn is_Rn_immediate(&self) -> bool { 0 != (self.raw & (1 << 10)) }
+
     /// Checks whether the given instruction is a load or store instruction.
     pub fn is_load(&self) -> bool { 0 != (self.raw & (1 << 11)) }
 
     /// Checks whether the given load/store instruction transfers a single byte.
     pub fn is_transfering_bytes(&self) -> bool { 0 != (self.raw & (1 << 10)) }
-
-    /// Checks whether this is an LDRH instruction.
-    pub fn is_load_halfword(&self) -> bool { self.is_load() }
 
     /// Checks whether this load/store instruction transfers signed data.
     pub fn is_signed(&self) -> bool { self.is_transfering_bytes() }
@@ -274,6 +300,9 @@ impl ThumbInstruction {
     /// Checks whether a PUSH/POP instruction does what this function's name implies.
     #[allow(non_snake_case)]
     pub fn is_storing_LR_loading_PC(&self) -> bool { 0 != (self.raw & (1 << 8)) }
+
+    /// Checks whether a 23-bit offset branch loads the higher offset half and jumps.
+    pub fn is_high_offset_and_branch(&self) -> bool { self.is_load() }
 }
 
 

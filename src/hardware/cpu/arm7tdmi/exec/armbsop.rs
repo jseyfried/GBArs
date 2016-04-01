@@ -10,6 +10,7 @@ use super::super::Arm7Tdmi;
 
 /// A barrel shifter opcode.
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[allow(non_camel_case_types)]
 pub enum ArmBSOP {
     #[doc = "No shift (LSL #0)"]                            NOP,
     #[doc = "Logical Shift Left by an immediate value"]     LSL_Imm(u32),
@@ -43,6 +44,17 @@ impl ArmBSOP {
             2 => ArmBSOP::ASR_Reg(reg),
             3 => ArmBSOP::ROR_Reg(reg),
             _ => unreachable!(),
+        }
+    }
+
+    /// Gets the assembly name of the barrel shifter operation.
+    pub fn name(&self) -> &'static str {
+        match *self {
+            ArmBSOP::LSL_Imm(_) | ArmBSOP::LSL_Reg(_) => "lsl",
+            ArmBSOP::LSR_Imm(_) | ArmBSOP::LSR_Reg(_) => "lsr",
+            ArmBSOP::ASR_Imm(_) | ArmBSOP::ASR_Reg(_) => "asr",
+            ArmBSOP::ROR_Imm(_) | ArmBSOP::ROR_Reg(_) => "ror",
+            ArmBSOP::RRX => "rrx", ArmBSOP::NOP => "",
         }
     }
 }

@@ -1,4 +1,5 @@
 // License below.
+//! Implements ARM state disassembly.
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
@@ -10,15 +11,8 @@ use std::fmt;
 
 impl fmt::Display for ArmInstruction {
     /// Writes a disassembly of the given instruction to a formatter.
-    ///
-    /// # Params
-    /// - `f`: The formatter to write to.
-    ///
-    /// # Returns
-    /// - `Ok` if everything succeeded.
-    /// - `Err` in case of an error.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:#010X}\t", self.raw as u32));
+        try!(write!(f, "{:#010X}\t", self.raw));
 
         match self.op {
             ArmOpcode::Unknown        => write!(f, "<unknown>"),
