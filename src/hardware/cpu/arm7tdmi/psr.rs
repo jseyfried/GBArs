@@ -55,8 +55,8 @@ pub struct PSR(pub u32);
 
 impl PSR {
     const RAW_DEFAULT: u32 = PSR::MODE_SUPERVISOR
-                           | (1 << (PSR::IRQ_DISABLE_BIT as u32))
-                           | (1 << (PSR::FIQ_DISABLE_BIT as u32));
+                           | (1 << PSR::IRQ_DISABLE_BIT)
+                           | (1 << PSR::FIQ_DISABLE_BIT);
 
     const NON_RESERVED_MASK: u32 = 0b11110000_00000000_00000000_11111111_u32;
     //                               NZCV                       IFTMMMMM

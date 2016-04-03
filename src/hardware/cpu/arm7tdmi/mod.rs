@@ -224,9 +224,12 @@ impl Arm7Tdmi {
         } else {
             // Fetch.
             let new_fetched_thumb = try!(self.bus.borrow().load_halfword(self.gpr[Arm7Tdmi::PC] as u32)) as u16;
+            // Decode.
+            let new_decoded_thumb = try!(ThumbInstruction::decode(self.fetched_thumb));
 
             // Apply new state.
             self.fetched_thumb = new_fetched_thumb;
+            self.decoded_thumb = new_decoded_thumb;
 
             unimplemented!();
         };

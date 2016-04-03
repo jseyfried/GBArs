@@ -213,9 +213,6 @@ impl ThumbInstruction {
     /// Extracts a 9-bit signed offset value.
     pub fn offs9(&self) -> i32 { ((((self.raw & 0xFF) as u32) << 24) as i32) >> 23 }
 
-    /// Extracts a 10-bit signed offset value.
-    pub fn offs10(&self) -> i32 { ((((self.raw & 0xFF) as u32) << 24) as i32) >> 22 }
-
     /// Extracts a 12-bit signed offset value.
     pub fn offs12(&self) -> i32 { ((((self.raw & 0x7FF) as u32) << 21) as i32) >> 20 }
 
@@ -224,6 +221,9 @@ impl ThumbInstruction {
 
     /// Extracts the comment field of a SWI instruction.
     pub fn comment(&self) -> u8 { (self.raw & 0xFF) as u8 }
+
+    /// Extracts the register list of an LDM/STM instruction.
+    pub fn register_list(&self) -> u8 { self.comment() }
 
     /// Extracts a data processing opcode for the `AddSub` instruction.
     #[allow(non_snake_case)]
@@ -302,7 +302,7 @@ impl ThumbInstruction {
     pub fn is_storing_LR_loading_PC(&self) -> bool { 0 != (self.raw & (1 << 8)) }
 
     /// Checks whether a 23-bit offset branch loads the higher offset half and jumps.
-    pub fn is_high_offset_and_branch(&self) -> bool { self.is_load() }
+    pub fn is_low_offset_and_branch(&self) -> bool { self.is_load() }
 }
 
 

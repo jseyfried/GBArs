@@ -28,8 +28,13 @@ impl fmt::Display for ThumbInstruction {
             ThumbOpcode::LdrhStrhImm         => self.fmt_LdrhStrhImm(f),
             ThumbOpcode::LdrStrSpImm         => self.fmt_LdrStrSpImm(f),
             ThumbOpcode::CalcAddrImm         => self.fmt_CalcAddrImm(f),
-
-            _ => unimplemented!()
+            ThumbOpcode::AddSpOffs           => self.fmt_AddSpOffs(f),
+            ThumbOpcode::PushPopRegs         => self.fmt_PushPopRegs(f),
+            ThumbOpcode::LdmStmRegs          => self.fmt_LdmStmRegs(f),
+            ThumbOpcode::SoftwareInterrupt   => self.fmt_SoftwareInterrupt(f),
+            ThumbOpcode::BranchConditionOffs => self.fmt_BranchConditionOffs(f),
+            ThumbOpcode::BranchOffs          => self.fmt_BranchOffs(f),
+            ThumbOpcode::BranchLongOffs      => self.fmt_BranchLongOffs(f),
         }
     }
 }
@@ -160,6 +165,61 @@ impl ThumbInstruction {
             if self.is_base_SP() { "SP" } else { "PC" },
             self.imm10(),
         )
+    }
+
+    #[allow(non_snake_case)]
+    fn fmt_AddSpOffs(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "add\tSP, #{}", self.offs9()) }
+
+    #[allow(non_snake_case)]
+    fn fmt_PushPopRegs(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}\t", if self.is_load() { "pop" } else { "push" }));
+        let with_reg = if self.is_storing_LR_loading_PC() {
+            if self.is_load() { Some(15_usize) } else { Some(14_usize) }
+        } else { None };
+        self.fmt_register_list(f, with_reg)
+    }
+
+    #[allow(non_snake_case)]
+    fn fmt_LdmStmRegs(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}\t{}!, ",
+            if self.is_load() { "ldmia" } else { "stmia" },
+            Arm7Tdmi::register_name(self.Rm()),
+        ));
+        self.fmt_register_list(f, None)
+    }
+
+    fn fmt_register_list(&self, f: &mut fmt::Formatter, with_reg: Option<usize>) -> fmt::Result {
+        try!(write!(f, "{{"));
+        let regs = self.register_list();
+        let mut any = false;
+        for i in 0..8 { if 0 != (regs & (1 << i)) {
+            if any { try!(write!(f, ", ")); }
+            any = true;
+            try!(write!(f, "{}", Arm7Tdmi::register_name(i as usize)));
+        }}
+        if let Some(r) = with_reg {
+            if any { try!(write!(f, ", ")); }
+            try!(write!(f, "{}", Arm7Tdmi::register_name(r)));
+        }
+        write!(f, "}}")
+    }
+
+    #[allow(non_snake_case)]
+    fn fmt_SoftwareInterrupt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "swi\t{}", self.comment()) }
+
+    #[allow(non_snake_case)]
+    fn fmt_BranchConditionOffs(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "b{}\t{}", self.condition().assembly_name(), self.offs9())
+    }
+
+    #[allow(non_snake_case)]
+    fn fmt_BranchOffs(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "b #{}", self.offs12()) }
+
+    #[allow(non_snake_case)]
+    fn fmt_BranchLongOffs(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let offs = self.long_offs_part();
+        if self.is_low_offset_and_branch() { write!(f, "bl1 #{:010X}",  (offs <<  1) as u32) }
+        else                               { write!(f, "bl0 #{:010X}", ((offs << 21) >> 10) as u32) }
     }
 }
 

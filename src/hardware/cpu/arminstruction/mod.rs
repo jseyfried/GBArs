@@ -396,7 +396,7 @@ impl ArmInstruction {
     }
 
     /// Get the 24-bit sign-extended branch offset.
-    pub fn branch_offset(&self) -> i32 { (((self.raw << 8) as i32) >> 6) as i32 }
+    pub fn branch_offset(&self) -> i32 { ((self.raw << 8) as i32) >> 6 }
 
     /// Get the 24-bit comment field of an `SWI` instruction.
     pub fn comment(&self) -> u32 { self.raw & 0x00FFFFFF }
@@ -419,7 +419,7 @@ impl ArmInstruction {
     /// rotated byte.
     pub fn rotated_immediate(&self) -> i32 {
         let bits = 2 * ((self.raw >> 8) & 0b1111);
-        ((self.raw & 0xFF) as u32).rotate_right(bits) as i32
+        (self.raw & 0xFF).rotate_right(bits) as i32
     }
 
     /// Determines whether an offset field is to be decoded
@@ -584,7 +584,7 @@ impl ArmInstruction {
         }}
 
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
-            ((self.raw >> 7) & 0b1_1111) as u32
+            (self.raw >> 7) & 0b1_1111
         } else {
             match self.decode_Rs_shift(a, regs) { Ok(x) => x, Err(y) => { return y; }, }
         };
@@ -640,7 +640,7 @@ impl ArmInstruction {
 
         // A shift by Rs==0 just returns `a` without a new carry flag.
         let b: u32 = if (self.raw & (1 << 4)) == 0 {
-            ((self.raw >> 7) & 0b1_1111) as u32
+            (self.raw >> 7) & 0b1_1111
         } else {
             match self.decode_Rs_shift_with_carry(a, regs, carry) { Ok(x) => x, Err(y) => { return y; }, }
         };

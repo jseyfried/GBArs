@@ -18,14 +18,16 @@ impl fmt::Display for Arm7Tdmi {
         // Show all 16 GPRs in a nice table.
         for i in 0..16 {
             if (i % 4) == 0 { try!(write!(f, "\n\t")); }
-            try!(write!(f, "{}[{:08X}]\t", Arm7Tdmi::REGISTER_NAMES[i], self.gpr[i]));
+            try!(write!(f, "{}[{:08X}]\t", Arm7Tdmi::DEBUG_REGISTER_NAMES[i], self.gpr[i]));
         }
 
         // Show the current pipeline state.
         try!(write!(f, "\n\n- Pipeline State\n\t\
-                                ARM Fetch:   {:#010X}\n\t\
-                                ARM Decode:  {}\n\t",
-            self.fetched_arm, self.decoded_arm
+                                ARM   Fetch:  {:#010X}\n\t\
+                                ARM   Decode: {}\n\t\n\t\
+                                THUMB Fetch:      {:#06X}\n\t\
+                                THUMB Decode:     {}\n\t",
+            self.fetched_arm, self.decoded_arm, self.fetched_thumb, self.decoded_thumb
         ));
 
         // Show extra settings 'n' stuff.

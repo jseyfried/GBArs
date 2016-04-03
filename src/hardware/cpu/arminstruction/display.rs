@@ -6,7 +6,6 @@
 #![warn(missing_docs)]
 
 use super::*;
-use super::super::armcondition::ArmCondition;
 use std::fmt;
 
 impl fmt::Display for ArmInstruction {
@@ -34,19 +33,6 @@ impl fmt::Display for ArmInstruction {
             ArmOpcode::MULL_MLAL      => self.fmt_mull_mlal(f),
             ArmOpcode::DataProcessing => self.fmt_data_processing(f),
         }
-    }
-}
-
-impl ArmCondition {
-    const CONDITION_NAMES: &'static [&'static str] = &[
-        "eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc",
-        "hi", "ls", "ge", "lt", "gt", "le",   "", "nv",
-    ];
-
-    fn assembly_name(&self) -> &'static str {
-        let i = *self as u8 as usize;
-        debug_assert!(i < ArmCondition::CONDITION_NAMES.len());
-        ArmCondition::CONDITION_NAMES[i]
     }
 }
 

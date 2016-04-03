@@ -31,14 +31,19 @@ pub enum ArmCondition {
 }
 
 impl ArmCondition {
+    const CONDITION_NAMES: &'static [&'static str] = &[
+        "eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc",
+        "hi", "ls", "ge", "lt", "gt", "le",   "", "nv",
+    ];
+
+    /// Get the assemly name of an ARM condition.
+    pub fn assembly_name(&self) -> &'static str {
+        let i = *self as u8 as usize;
+        debug_assert!(i < ArmCondition::CONDITION_NAMES.len());
+        ArmCondition::CONDITION_NAMES[i]
+    }
+
     /// Evaluates the condition field depending on the CPSR's state.
-    ///
-    /// # Params
-    /// - `cpsr`: The CPSR to inspect.
-    ///
-    /// # Returns
-    /// - `Ok`: `true` if the corresponding instruction should be executed, otherwise `false`.
-    /// - `Err`: The condition field is `NV`, which is reserved in ARM7TDMI.
     pub fn check(self, cpsr: &PSR) -> Result<bool, GbaError> {
         match self {
             ArmCondition::EQ => Ok( cpsr.Z() ),
