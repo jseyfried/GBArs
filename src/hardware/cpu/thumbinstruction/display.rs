@@ -45,7 +45,7 @@ impl ThumbInstruction {
         let rd = Arm7Tdmi::register_name(self.Rd());
         let rs = Arm7Tdmi::register_name(self.Rs());
         let op = self.dpop_AddSub();
-        try!(write!(f, "{}\t{}, {}, ", op, rd, rs));
+        try!(write!(f, "{}s\t{}, {}, ", op, rd, rs));
         if self.is_Rn_immediate() { write!(f, "#{}", self.Rn() as i32) }
         else                      { write!(f,  "{}", Arm7Tdmi::register_name(self.Rn())) }
     }
@@ -55,10 +55,10 @@ impl ThumbInstruction {
         let rd = Arm7Tdmi::register_name(self.Rd());
         let rs = Arm7Tdmi::register_name(self.Rs());
         let (op, x) = match self.bsop_MoveShiftedReg() {
-            ArmBSOP::NOP => { return write!(f, "lsl\t{}, {}, #0", rd, rs); }
-            ArmBSOP::LSL_Imm(x) => ("lsl", x),
-            ArmBSOP::LSR_Imm(x) => ("lsr", x),
-            ArmBSOP::ASR_Imm(x) => ("asr", x),
+            ArmBSOP::NOP => { return write!(f, "lsls\t{}, {}, #0", rd, rs); }
+            ArmBSOP::LSL_Imm(x) => ("lsls", x),
+            ArmBSOP::LSR_Imm(x) => ("lsrs", x),
+            ArmBSOP::ASR_Imm(x) => ("asrs", x),
             _ => unreachable!()
         };
         write!(f, "{}\t{}, {}, #{}", op, rd, rs, x)
@@ -69,12 +69,13 @@ impl ThumbInstruction {
         let rd  = Arm7Tdmi::register_name(self.Rd());
         let imm = self.imm8();
         let op  = self.dpop_DataProcessingFlags();
-        write!(f, "{}\t{}, #{}", op, rd, imm)
+        let s   = if op == ArmDPOP::CMP { ' ' } else { 's' };
+        write!(f, "{}{}\t{}, #{}", op, s, rd, imm)
     }
 
     #[allow(non_snake_case)]
     fn fmt_AluMul(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "mul\t{}, {}", Arm7Tdmi::register_name(self.Rd()), Arm7Tdmi::register_name(self.Rs()))
+        write!(f, "muls\t{}, {}", Arm7Tdmi::register_name(self.Rd()), Arm7Tdmi::register_name(self.Rs()))
     }
 
     #[allow(non_snake_case)]
@@ -83,8 +84,8 @@ impl ThumbInstruction {
         let rd = Arm7Tdmi::register_name(self.Rd());
         let rs = Arm7Tdmi::register_name(self.Rs());
 
-        if dpop == ArmDPOP::MOV { write!(f, "{}\t{}, {}", bsop.name(), rd, rs) }
-        else                    { write!(f, "{}\t{}, {}", dpop, rd, rs) }
+        if dpop == ArmDPOP::MOV { write!(f, "{}s\t{}, {}", bsop.name(), rd, rs) }
+        else { write!(f, "{}{}\t{}, {}", dpop, if dpop.is_test() { ' ' } else { 's' }, rd, rs) }
     }
 
     #[allow(non_snake_case)]
