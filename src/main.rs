@@ -72,11 +72,17 @@ pub struct CmdLineArgs {
     /// and logs the result.
     pub single_disasm_thumb: Option<String>,
 
-    /// Accepts `--dasm-bios RANGE`
+    /// Accepts `--dasm-bios-arm RANGE`
     ///
     /// Disassembles a section of the BIOS code
     /// area and logs the result.
-    pub disasm_bios: Option<String>,
+    pub disasm_bios_arm: Option<String>,
+
+    /// Accepts `--dasm-bios-thumb RANGE`
+    ///
+    /// Disassembles a section of the BIOS code
+    /// area and logs the result.
+    pub disasm_bios_thumb: Option<String>,
 
     /// Accepts `-v` or `--verbose` as `true`.
     ///
@@ -134,7 +140,8 @@ impl Default for CmdLineArgs {
             log_file_path: PathBuf::from("./GBArs.log"),
             single_disasm_arm: None,
             single_disasm_thumb: None,
-            disasm_bios: None,
+            disasm_bios_arm: None,
+            disasm_bios_thumb: None,
             verbose: cfg!(debug_assertions), // Default to `true` while testing.
             colour: true,
             exit: false,
@@ -196,8 +203,17 @@ fn parse_command_line(args: &mut CmdLineArgs) {
                        The instruction must be a hex number without base, e.g. 01F7, \
                        in Big Endian format, i.e. the most significant byte is left.")
           .metavar("INST");
-    parser.refer(&mut args.disasm_bios)
-          .add_option(&["--dasm-bios"], StoreOption,
+    parser.refer(&mut args.disasm_bios_arm)
+          .add_option(&["--dasm-bios-arm"], StoreOption,
+                      "Disassembles a section of the BIOS ROM. The section is defined \
+                       by a RANGE, which is a pair of hexadecimal addresses separated \
+                       by two dots `..`, e.g. `00C4..D8`. If no start address on the \
+                       left is given, e.g. `..D8`, it will be set to zero. If no end \
+                       address on the right is given, e.g. `00C4..`, it will be set to \
+                       `4000` (16KiB).")
+          .metavar("RANGE");
+    parser.refer(&mut args.disasm_bios_thumb)
+          .add_option(&["--dasm-bios-thumb"], StoreOption,
                       "Disassembles a section of the BIOS ROM. The section is defined \
                        by a RANGE, which is a pair of hexadecimal addresses separated \
                        by two dots `..`, e.g. `00C4..D8`. If no start address on the \
@@ -238,7 +254,8 @@ fn handle_oneshot_commands(args: &CmdLineArgs, gba: &hardware::Gba) {
     if let Some(ref x) = args.single_disasm_thumb { disasm_thumb(x.as_str()); }
 
     // ROM sections to disassemble?
-    if let Some(ref x) = args.disasm_bios { disasm_bios(x.as_str(), gba); }
+    if let Some(ref x) = args.disasm_bios_arm   { disasm_bios_arm(  x.as_str(), gba); }
+    if let Some(ref x) = args.disasm_bios_thumb { disasm_bios_thumb(x.as_str(), gba); }
 }
 
 fn disasm_arm(x: &str) {
@@ -252,11 +269,16 @@ fn disasm_arm(x: &str) {
 }
 
 fn disasm_thumb(x: &str) {
-    error!("DASM THUMB: Not yet implemented!\n{}", x);
-    // TODO implement THUMB state instructions.
+    match u16::from_str_radix(x, 16) {
+        Ok(i) => { match hardware::cpu::ThumbInstruction::decode(i) {
+            Ok(inst) => info!("DASM THUMB:\t{}", inst),
+            Err(e)   => info!("DASM THUMB invalid - {}", e),
+        };},
+        Err(e) => { error!("DASM THUMB: {}\nRun `GBArs --help` for details.", e); },
+    }
 }
 
-fn disasm_bios(x: &str, gba: &hardware::Gba) {
+fn disasm_bios_arm(x: &str, gba: &hardware::Gba) {
     use hardware::memory::Rom32;
     use std::fmt::Write;
     let r = if let Some(r) = parse_hex_range(x, 0, hardware::memory::BIOS_ROM_LEN as u32) { r } else { return; };
@@ -265,13 +287,27 @@ fn disasm_bios(x: &str, gba: &hardware::Gba) {
     let mut i = r.start & 0xFFFFFFFC;
     while i < r.end {
         let w = bios.read_word(i);
-        let e = if let Ok(inst) = hardware::cpu::ArmInstruction::decode(w) {
-            write!(msg, "{:06X} - {}\n", i, inst)
-        } else {
-            write!(msg, "{:06X} - {:08X}\n", i, w)
-        };
+        let e = if let Ok(inst) = hardware::cpu::ArmInstruction::decode(w) { write!(msg, "{:06X} - {}\n", i, inst) }
+                else { write!(msg, "{:06X} - {:08X}\n", i, w) };
         if let Err(e) = e { error!("{}", e); break; }
         i += 4;
+    }
+    info!("{}", msg);
+}
+
+fn disasm_bios_thumb(x: &str, gba: &hardware::Gba) {
+    use hardware::memory::Rom16;
+    use std::fmt::Write;
+    let r = if let Some(r) = parse_hex_range(x, 0, hardware::memory::BIOS_ROM_LEN as u32) { r } else { return; };
+    let bios = gba.bios();
+    let mut msg = "Disassembling BIOS ROM section:\n\nOffset   Data  \tInstruction\n".to_owned();
+    let mut i = r.start & 0xFFFFFFFE;
+    while i < r.end {
+        let h = bios.read_halfword(i);
+        let e = if let Ok(inst) = hardware::cpu::ThumbInstruction::decode(h) { write!(msg, "{:06X} - {}\n", i, inst) }
+                else { write!(msg, "{:06X} - {:#06X}\n", i, h) };
+        if let Err(e) = e { error!("{}", e); break; }
+        i += 2;
     }
     info!("{}", msg);
 }

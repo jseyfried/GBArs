@@ -12,7 +12,7 @@ use super::super::arm7tdmi::{Arm7Tdmi, ArmDPOP, ArmBSOP};
 impl fmt::Display for ThumbInstruction {
     /// Writes a disassembly of the given instruction to a formatter.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{:06X}\t", self.raw));
+        try!(write!(f, "{:#06X}\t", self.raw));
 
         match self.op {
             ThumbOpcode::AddSub              => self.fmt_AddSub(f),
@@ -55,10 +55,11 @@ impl ThumbInstruction {
         let rd = Arm7Tdmi::register_name(self.Rd());
         let rs = Arm7Tdmi::register_name(self.Rs());
         let (op, x) = match self.bsop_MoveShiftedReg() {
+            ArmBSOP::NOP => { return write!(f, "lsl\t{}, {}, #0", rd, rs); }
             ArmBSOP::LSL_Imm(x) => ("lsl", x),
             ArmBSOP::LSR_Imm(x) => ("lsr", x),
             ArmBSOP::ASR_Imm(x) => ("asr", x),
-            _ => unreachable!(),
+            _ => unreachable!()
         };
         write!(f, "{}\t{}, {}, #{}", op, rd, rs, x)
     }
@@ -213,13 +214,13 @@ impl ThumbInstruction {
     }
 
     #[allow(non_snake_case)]
-    fn fmt_BranchOffs(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "b #{}", self.offs12()) }
+    fn fmt_BranchOffs(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "b\t#{}", self.offs12()) }
 
     #[allow(non_snake_case)]
     fn fmt_BranchLongOffs(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let offs = self.long_offs_part();
-        if self.is_low_offset_and_branch() { write!(f, "bl1 #{:010X}",  (offs <<  1) as u32) }
-        else                               { write!(f, "bl0 #{:010X}", ((offs << 21) >> 10) as u32) }
+        if self.is_low_offset_and_branch() { write!(f, "bl1\t#{:010X}",  (offs <<  1) as u32) }
+        else                               { write!(f, "bl0\t#{:010X}", ((offs << 21) >> 10) as u32) }
     }
 }
 

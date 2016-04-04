@@ -38,7 +38,7 @@ impl Log for ConsoleFileLogger {
             let cur = thread::current();
             let tid = cur.name().unwrap_or("<?>");
             let loc = record.location();
-            let loc = format!("[{}:{} - {}]", loc.file(), loc.line(), loc.module_path());
+            let loc = format!("[{} - {}]", loc.module_path(), loc.line());
             let fmt = format!("{}", record.args()).replace("\n","\n\t\t   ");
 
             // Build a common log message for both targets.
