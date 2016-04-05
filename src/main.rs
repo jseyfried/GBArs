@@ -19,7 +19,8 @@
 #![cfg_attr(feature="clippy", warn(result_unwrap_used, option_unwrap_used, print_stdout))]
 #![cfg_attr(feature="clippy", warn(single_match_else, string_add, string_add_assign))]
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
-#![feature(box_syntax, associated_consts, test)]
+#![cfg_attr(feature="clippy", allow(doc_markdown))] // Too many false positives, gettin' on my nerves.
+#![feature(box_syntax, associated_consts, test)] // `test` is sometimes "unknown" an causes other times errors if missing.
 #![warn(missing_docs, trivial_casts, trivial_numeric_casts)]
 
 #[macro_use]

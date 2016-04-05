@@ -182,7 +182,7 @@ impl GamePakRom {
     }
 
     /// Get a handle for the ROM's header.
-    pub fn header<'a>(&'a self) -> GamePakRomHeader<'a> {
+    pub fn header(&self) -> GamePakRomHeader {
         GamePakRomHeader(self)
     }
 

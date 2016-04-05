@@ -146,17 +146,17 @@ impl Arm7Tdmi {
     }
 
     fn change_mode(&mut self, new_mode: Mode) {
-        let cmi = self.mode as u8 as usize;
-        let nmi =  new_mode as u8 as usize;
+        let current_mi = self.mode as u8 as usize;
+        let next_mi    =  new_mode as u8 as usize;
 
         // Save banked registers R13, R14, SPSR.
         let ret_addr = self.gpr[Arm7Tdmi::PC]; // FIXME TODO add special offset by exception type
-        self.gpr_r14_all[cmi] = self.gpr[14];
-        self.gpr_r14_all[nmi] = ret_addr;
-        self.gpr[14] = ret_addr;
-        self.gpr_r13_all[cmi] = self.gpr[13];
-        self.gpr[13] = self.gpr_r13_all[nmi];
-        self.spsr[nmi] = self.cpsr;
+        self.gpr_r14_all[current_mi] = self.gpr[14];
+        self.gpr_r14_all[next_mi]    = ret_addr;
+        self.gpr[14]                 = ret_addr;
+        self.gpr_r13_all[current_mi] = self.gpr[13];
+        self.gpr[13]                 = self.gpr_r13_all[next_mi];
+        self.spsr[next_mi]           = self.cpsr;
 
         // Now the banked registers R8..R12.
         if (new_mode == Mode::FIQ) ^ (self.mode == Mode::FIQ) {

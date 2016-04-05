@@ -128,6 +128,7 @@ impl ThumbInstruction {
     }
 
     /// Decodes a raw 16-bit integer as a THUMB instruction.
+    #[cfg_attr(feature="clippy", allow(if_same_then_else))] // Order of checks matters a lot here, false positive.
     pub fn decode(raw: u16) -> Result<ThumbInstruction, GbaError> {
         // Decode the opcode to something easier to compare and match.
         let op: ThumbOpcode =
@@ -227,7 +228,7 @@ impl ThumbInstruction {
 
     /// Extracts a data processing opcode for the `AddSub` instruction.
     #[allow(non_snake_case)]
-    pub fn dpop_AddSub(&self) -> ArmDPOP { if 0 != (self.raw & (1 << 9)) { ArmDPOP::SUB } else { ArmDPOP::ADD } }
+    pub fn dpop_AddSub(&self) -> ArmDPOP { if 0 == (self.raw & (1 << 9)) { ArmDPOP::ADD } else { ArmDPOP::SUB } }
 
     /// Extracts a barrel shifter opcode for the `MoveShiftedReg` instruction.
     #[allow(non_snake_case)]

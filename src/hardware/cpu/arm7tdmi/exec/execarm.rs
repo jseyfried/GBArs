@@ -87,7 +87,7 @@ impl Arm7Tdmi {
         self.gpr[inst.Rd()] = ((res      ) & (u32::MAX as u64)) as i32;
 
         if inst.is_setting_flags() {
-            self.cpsr.set_N((res as i64) < 0);
+            self.cpsr.set_N((res & (1 << 63)) != 0);
             self.cpsr.set_Z(res == 0);
             self.cpsr.set_C(false); // "some meaningless value"
             self.cpsr.set_V(false); // "some meaningless value"

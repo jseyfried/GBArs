@@ -12,11 +12,13 @@ use super::super::Arm7Tdmi;
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum ArmBSOP {
-    #[doc = "No shift (LSL #0)"]                            NOP,
     #[doc = "Logical Shift Left by an immediate value"]     LSL_Imm(u32),
     #[doc = "Logical Shift Right by an immediate value"]    LSR_Imm(u32),
     #[doc = "Arithmetic Shift Right by an immediate value"] ASR_Imm(u32),
     #[doc = "Rotate Right by an immediate value"]           ROR_Imm(u32),
+    #[doc = "No shift (LSL #32)"]                           NOP,
+    #[doc = "Logical Shift Right by 32 bits"]               LSR_32,
+    #[doc = "Arithmetic Shift Right by 32 bits"]            ASR_32,
     #[doc = "Rotate Right Extended"]                        RRX,
     #[doc = "Logical Shift Left by a register value"]       LSL_Reg(usize),
     #[doc = "Logical Shift Right by a register value"]      LSR_Reg(usize),
@@ -27,17 +29,19 @@ pub enum ArmBSOP {
 impl ArmBSOP {
     /// Decodes a shift opcode from a 2-bit integer.
     pub fn decode_immediate(op: u32, imm: u32) -> ArmBSOP {
+        debug_assert!(imm < 32);
         match op & 0b11 {
-            0 => if imm == 0 { ArmBSOP::NOP } else { ArmBSOP::LSL_Imm(imm) },
-            1 => ArmBSOP::LSR_Imm(imm),
-            2 => ArmBSOP::ASR_Imm(imm),
-            3 => if imm == 0 { ArmBSOP::RRX } else { ArmBSOP::ROR_Imm(imm) },
+            0 => if imm == 0 { ArmBSOP::NOP    } else { ArmBSOP::LSL_Imm(imm) },
+            1 => if imm == 0 { ArmBSOP::LSR_32 } else { ArmBSOP::LSR_Imm(imm) },
+            2 => if imm == 0 { ArmBSOP::ASR_32 } else { ArmBSOP::ASR_Imm(imm) },
+            3 => if imm == 0 { ArmBSOP::RRX    } else { ArmBSOP::ROR_Imm(imm) },
             _ => unreachable!(),
         }
     }
 
     /// Decodes a shift opcode from a 2-bit integer.
     pub fn decode_register(op: u32, reg: usize) -> ArmBSOP {
+        debug_assert!(reg < 16);
         match op & 0b11 {
             0 => ArmBSOP::LSL_Reg(reg),
             1 => ArmBSOP::LSR_Reg(reg),
@@ -50,9 +54,9 @@ impl ArmBSOP {
     /// Gets the assembly name of the barrel shifter operation.
     pub fn name(&self) -> &'static str {
         match *self {
+            ArmBSOP::LSR_Imm(_) | ArmBSOP::LSR_Reg(_) | LSR_32 => "lsr",
+            ArmBSOP::ASR_Imm(_) | ArmBSOP::ASR_Reg(_) | ASR_32 => "asr",
             ArmBSOP::LSL_Imm(_) | ArmBSOP::LSL_Reg(_) => "lsl",
-            ArmBSOP::LSR_Imm(_) | ArmBSOP::LSR_Reg(_) => "lsr",
-            ArmBSOP::ASR_Imm(_) | ArmBSOP::ASR_Reg(_) => "asr",
             ArmBSOP::ROR_Imm(_) | ArmBSOP::ROR_Reg(_) => "ror",
             ArmBSOP::RRX => "rrx", ArmBSOP::NOP => "",
         }
@@ -62,11 +66,13 @@ impl ArmBSOP {
 impl fmt::Display for ArmBSOP {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ArmBSOP::NOP => Ok(()),
             ArmBSOP::LSL_Imm(x) => write!(f, "lsl #{}", x),
             ArmBSOP::LSR_Imm(x) => write!(f, "lsr #{}", x),
             ArmBSOP::ASR_Imm(x) => write!(f, "asr #{}", x),
             ArmBSOP::ROR_Imm(x) => write!(f, "ror #{}", x),
+            ArmBSOP::NOP        => Ok(()),
+            ArmBSOP::LSR_32     => write!(f, "lsr #32"),
+            ArmBSOP::ASR_32     => write!(f, "asr #32"),
             ArmBSOP::RRX        => write!(f, "rrx"),
             ArmBSOP::LSL_Reg(x) => write!(f, "lsl {}", Arm7Tdmi::register_name(x)),
             ArmBSOP::LSR_Reg(x) => write!(f, "lsr {}", Arm7Tdmi::register_name(x)),

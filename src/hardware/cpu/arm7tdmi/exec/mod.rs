@@ -84,6 +84,32 @@ impl Arm7Tdmi {
         *v = x.1;
         x.0
     }
+
+
+    fn alu_barrel_shifter(&mut self, bsop: ArmBSOP, op1: i32) -> i32 {
+        match bsop {
+            ArmBSOP::LSL_Imm(x) => op1 << x,
+            ArmBSOP::LSR_Imm(x) => ((op1 as u32) >> x) as i32,
+            ArmBSOP::ASR_Imm(x) => op1 >> x,
+            ArmBSOP::ROR_Imm(x) => op1.rotate_right(x),
+            ArmBSOP::NOP        => op1,
+            ArmBSOP::LSR_32     => 0,
+            ArmBSOP::ASR_32     => op1 >> 31,
+            ArmBSOP::RRX        => ((self.cpsr.C() as i32) << 31) | (((op1 as u32) >> 1) as i32),
+            ArmBSOP::LSL_Reg(r) => self.alu_lsl_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::LSR_Reg(r) => self.alu_lsr_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::ASR_Reg(r) => self.alu_asr_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::ROR_Reg(r) => self.alu_ror_reg(op1, (self.gpr[r] as u32) & 0xFF),
+        }
+    }
+
+    fn alu_lsl_reg(&mut self, op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 << op2 } else { 0 } }
+    fn alu_asr_reg(&mut self, op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 >> op2 } else { op1 >> 31 } }
+    fn alu_ror_reg(&mut self, op1: i32, op2: u32) -> i32 { op1.rotate_right(op2 % 32) }
+    fn alu_lsr_reg(&mut self, op1: i32, op2: u32) -> i32 {
+        if op2 < 32 { ((op1 as u32) >> op2) as i32 }
+        else { ((op1 as u32) >> 31) as i32 }
+    }
 }
 
 
