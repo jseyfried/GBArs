@@ -155,6 +155,30 @@ impl Default for CmdLineArgs {
 }
 
 
+/// Parses a range from a hexadecimal input.
+///
+/// - `..` will be parsed as `default_begin..default_end`
+/// - `A..` will be parsed as `A..default_end`
+/// - `..B` will be parsed as `default_begin..B`
+/// - `A..B` will be parsed as `A..B`, where A and B are
+///   baseless hexadecimal numbers, e.g. `DEAD..BEEF`
+pub fn parse_hex_range(x: &str, default_begin: u32, default_end: u32) -> Option<Range<u32>> {
+    let mut s = x.split("..");
+    let a = if let Some(a) = s.next() { a } else { return None; };
+    let b = if let Some(b) = s.next() { b } else { return None; };
+    if let Some(_) = s.next() { return None; } // Invalid range syntax!
+    let start = if a.is_empty() { default_begin } else { match u32::from_str_radix(a, 16) {
+        Ok(i) => i,
+        Err(e) => { error!("{}", e); return None; },
+    }};
+    let end = if b.is_empty() { default_end } else { match u32::from_str_radix(b, 16) {
+        Ok(i) => i,
+        Err(e) => { error!("{}", e); return None; },
+    }};
+    Some(Range { start: start, end: end })
+}
+
+
 fn main() {
     // Build command line parser.
     let mut args = CmdLineArgs::default();
@@ -175,14 +199,8 @@ fn main() {
         }
     }
 
-    if args.run_repl { if let Err(e) = run_gba_repl(&mut gba) {
-        error!("{}", e);
-    }}
-
     // Exit early?
     if args.exit { trace!("Exiting early."); process::exit(0); }
-
-    // TODO remove and build a REPL
 }
 
 
@@ -322,22 +340,6 @@ fn disasm_bios_thumb(x: &str, gba: &hardware::Gba) {
     info!("{}", msg);
 }
 
-fn parse_hex_range(x: &str, default_begin: u32, default_end: u32) -> Option<Range<u32>> {
-    let mut s = x.split("..");
-    let a = if let Some(a) = s.next() { a } else { return None; };
-    let b = if let Some(b) = s.next() { b } else { return None; };
-    if let Some(_) = s.next() { return None; } // Invalid range syntax!
-    let start = if a.is_empty() { default_begin } else { match u32::from_str_radix(a, 16) {
-        Ok(i) => i,
-        Err(e) => { error!("{}", e); return None; },
-    }};
-    let end = if b.is_empty() { default_end } else { match u32::from_str_radix(b, 16) {
-        Ok(i) => i,
-        Err(e) => { error!("{}", e); return None; },
-    }};
-    Some(Range { start: start, end: end })
-}
-
 
 fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) {
     // If a BIOS file is given, load it into the BIOS ROM area.
@@ -374,53 +376,6 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
 
     // Configure the CPU.
     gba.cpu_arm7tdmi_mut().set_swi_optimised(args.optimise_swi);
-}
-
-
-fn run_gba_repl(gba: &mut hardware::Gba) -> Result<(), hardware::GbaError> {
-    use std::io::Write;
-    let mut terminal = term::stdout().expect("Failed grabbing a terminal handle!");
-    let mut diff = hardware::cpu::Arm7TdmiDiff::new();
-    gba.cpu_arm7tdmi_mut().reset();
-    diff.diff(gba.cpu_arm7tdmi());
-    diff.print(&mut terminal).unwrap_or(());
-    let mut input = String::new();
-    loop {
-        print!("\n\t[q = Quit, hex A..B = Hexdump Memory A..B]\n\t> ");
-        std::io::stdout().flush().unwrap();
-        input.clear();
-        std::io::stdin().read_line(&mut input).unwrap();
-        let mut s = input.trim().split_whitespace();
-        println!("");
-
-        match s.next() {
-            Some("q") => break,
-            Some("") | None => {
-                try!(gba.cpu_arm7tdmi_mut().pipeline_step());
-                diff.diff(gba.cpu_arm7tdmi());
-                diff.print(&mut terminal).unwrap_or(());
-            },
-            Some("hex") => { if let Some(r) = s.next() { do_hexdump(r, gba); } },
-            _ => println!("\t\t<What?>"),
-        }
-    }
-    Ok(())
-}
-
-fn do_hexdump(s: &str, gba: &hardware::Gba) {
-    if let Some(mut r) = parse_hex_range(&s, 0, 0) {
-        r.start &= !31;
-        r.end   +=  31;
-        r.end   &= !31;
-        print!("\n\t\t           00           04           08           0C           \
-                                 10           14           18           1C");
-        for i in r {
-            if (i % 32) == 0 { print!("\n\t\t{:08X} -", i); }
-            else if (i % 4) == 0 { print!(" "); }
-            print!(" {:02X}", gba.bus().load_byte(i).unwrap_or(0));
-        }
-        println!("\n");
-    }
 }
 
 
