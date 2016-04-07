@@ -15,10 +15,11 @@ And why GBA?
 # Features
 
 - A stupid name, pronounced: "G-B-Ars"
-- Integreated disassembler.
-	- Disassemble individual instructions via command line.
-	- Disassemble sections of the loaded ROM via command line.
-	- Mimics the standard ARM assembly language, although some parts of the syntax work differently. The integrated disassembler also does not support pseudo instructions like `push`/`pop`, to make the code simpler.
+- Integrated debug REPL.
+	- Emulate the GBA hardware step by step.
+	- Hexdump sections of the GBA memory system.
+	- Disassemble instructions from the GBA memory system. (TODO)
+	- Modify the GBA's memory or general purpose registers. (TODO)
 - Optional optimised BIOS routines. (TODO)
 - It is entirely written in Rust, a safe and awesome language.
 - TODO
@@ -34,10 +35,6 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 
 # Examples
 
-- **Change the log file**
-			
-			GBArs --log path/to/logfile.log
-			
 - **Run a game**
 	
 	The SRAM file contains any saved data.
@@ -50,17 +47,17 @@ Building the emulator currently requires a nightly Rust installation, version 1.
 			
 			GBArs --dasm-arm DEADBEEF
 			
-- **Disassemble a section of the BIOS**
+- **Run the debug REPL**
 	
-	Disassembles the first 128 bytes, 32 ARM state instructions. This also loads a BIOS ROM from any given file. If no such file is given, an internal default BIOS ROM will be loaded.
+	The `-D`/`--debug-repl` flag makes the emulator enter the debug REPL. Usually, GBArs would reset the emulator after exiting the REPL and continue emulation normally. `-x`/`--exit`, however, makes GBArs exit before starting normal emulation. Thus, `-Dx` makes GBArs enter the REPL and exit after the REPL is done.
 			
-			GBArs --bios ./GbaBios.gba --dasm-bios 0..80
+			GBArs -Dx
 
 # Screenshots
 
-Here you can see the integrated GBA terminal debugger in action. By just hitting `Enter`, the emulator runs a single pipeline step, i.e. a single instruction. The next instruction to be executed can be seen in the pipeline state.
+GBArs comes with a debug REPL that highlights all changed registers and flags of the corresponding CPU. It also can show sections of the GBA memory or disassemble memory regions as instructions.
 
-![GBA Debugger Action](./ref/term_stuff_00.png)
+![GBA Debugger Action](./ref/term_stuff_01.png)
 
 # Tools
 - **[wxHexEditor](http://www.wxhexeditor.org/)**
