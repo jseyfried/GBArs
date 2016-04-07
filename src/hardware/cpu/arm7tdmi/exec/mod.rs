@@ -18,7 +18,7 @@ pub mod armcondition;
 pub mod execarm;
 
 impl Arm7Tdmi {
-    fn alu_data_processing(&mut self, dpop: ArmDPOP, op1: i32, op2: i32) -> i32 {
+    fn alu_data_processing(&self, dpop: ArmDPOP, op1: i32, op2: i32) -> i32 {
         let c = self.cpsr.C() as i32;
         match dpop {
             ArmDPOP::AND => { op1 & op2 },
@@ -95,21 +95,65 @@ impl Arm7Tdmi {
             ArmBSOP::NOP        => op1,
             ArmBSOP::LSR_32     => 0,
             ArmBSOP::ASR_32     => op1 >> 31,
-            ArmBSOP::RRX        => ((self.cpsr.C() as i32) << 31) | (((op1 as u32) >> 1) as i32),
-            ArmBSOP::LSL_Reg(r) => self.alu_lsl_reg(op1, (self.gpr[r] as u32) & 0xFF),
-            ArmBSOP::LSR_Reg(r) => self.alu_lsr_reg(op1, (self.gpr[r] as u32) & 0xFF),
-            ArmBSOP::ASR_Reg(r) => self.alu_asr_reg(op1, (self.gpr[r] as u32) & 0xFF),
-            ArmBSOP::ROR_Reg(r) => self.alu_ror_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::RRX        => Arm7Tdmi::alu_rrx(op1, self.cpsr.C()),
+            ArmBSOP::LSL_Reg(r) => Arm7Tdmi::alu_lsl_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::LSR_Reg(r) => Arm7Tdmi::alu_lsr_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::ASR_Reg(r) => Arm7Tdmi::alu_asr_reg(op1, (self.gpr[r] as u32) & 0xFF),
+            ArmBSOP::ROR_Reg(r) => Arm7Tdmi::alu_ror_reg(op1, (self.gpr[r] as u32) & 0xFF),
         }
     }
 
-    fn alu_lsl_reg(&mut self, op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 << op2 } else { 0 } }
-    fn alu_asr_reg(&mut self, op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 >> op2 } else { op1 >> 31 } }
-    fn alu_ror_reg(&mut self, op1: i32, op2: u32) -> i32 { op1.rotate_right(op2 % 32) }
-    fn alu_lsr_reg(&mut self, op1: i32, op2: u32) -> i32 {
+    fn alu_barrel_shifter_carry(&mut self, bsop: ArmBSOP, op1: i32) -> (i32, bool) {
+        match bsop {
+            ArmBSOP::LSL_Imm(x) => Arm7Tdmi::alu_lsl_imm_carry(op1, x),
+            ArmBSOP::LSR_Imm(x) => Arm7Tdmi::alu_lsr_imm_carry(op1, x),
+            ArmBSOP::ASR_Imm(x) => Arm7Tdmi::alu_asr_imm_carry(op1, x),
+            ArmBSOP::ROR_Imm(x) => Arm7Tdmi::alu_ror_imm_carry(op1, x),
+            ArmBSOP::NOP        => (op1, self.cpsr.C()),
+            ArmBSOP::LSR_32     => (((op1 as u32) >> 31) as i32, false),
+            ArmBSOP::ASR_32     => (op1 >> 31, 0 != (op1 & (1 << 31))),
+            ArmBSOP::RRX        => (Arm7Tdmi::alu_rrx(op1, self.cpsr.C()), 0 != (op1 & 0b1)),
+            ArmBSOP::LSL_Reg(r) => Arm7Tdmi::alu_lsl_reg_carry(op1, (self.gpr[r] as u32) & 0xFF, self.cpsr.C()),
+            ArmBSOP::LSR_Reg(r) => Arm7Tdmi::alu_lsr_reg_carry(op1, (self.gpr[r] as u32) & 0xFF, self.cpsr.C()),
+            ArmBSOP::ASR_Reg(r) => Arm7Tdmi::alu_asr_reg_carry(op1, (self.gpr[r] as u32) & 0xFF, self.cpsr.C()),
+            ArmBSOP::ROR_Reg(r) => Arm7Tdmi::alu_ror_reg_carry(op1, (self.gpr[r] as u32) & 0xFF, self.cpsr.C()),
+        }
+    }
+
+    fn alu_rrx(op1: i32, c: bool) -> i32 { ((c as i32) << 31) | (((op1 as u32) >> 1) as i32) }
+    fn alu_lsl_imm_carry(op1: i32, op2: u32) -> (i32, bool) { (op1 << op2, 0 != ((op1 >> (32-op2)) & 0b1)) }
+    fn alu_lsr_imm_carry(op1: i32, op2: u32) -> (i32, bool) { (((op1 as u32) >> op2) as i32, 0 != ((op1 >> (op2-1)) & 0b1)) }
+    fn alu_asr_imm_carry(op1: i32, op2: u32) -> (i32, bool) { (op1 >> op2, 0 != ((op1 >> (op2-1)) & 0b1)) }
+    fn alu_ror_imm_carry(op1: i32, op2: u32) -> (i32, bool) { (op1.rotate_right(op2), 0 != ((op1 >> (op2-1)) & 0b1)) }
+    fn alu_lsl_reg(op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 << op2 } else { 0 } }
+    fn alu_asr_reg(op1: i32, op2: u32) -> i32 { if op2 < 32 { op1 >> op2 } else { op1 >> 31 } }
+    fn alu_ror_reg(op1: i32, op2: u32) -> i32 { op1.rotate_right(op2 % 32) }
+    fn alu_lsr_reg(op1: i32, op2: u32) -> i32 {
         if op2 < 32 { ((op1 as u32) >> op2) as i32 }
         else { ((op1 as u32) >> 31) as i32 }
     }
+    fn alu_lsl_reg_carry(op1: i32, op2: u32, c: bool) -> (i32, bool) { match op2 {
+        0           => (op1, c),
+        x if x < 32 => Arm7Tdmi::alu_lsl_imm_carry(op1, op2),
+        32          => (0, 0 != (op1 & 0b1)),
+        _           => (0, false),
+    }}
+    fn alu_lsr_reg_carry(op1: i32, op2: u32, c: bool) -> (i32, bool) { match op2 {
+        0           => (op1, c),
+        x if x < 32 => Arm7Tdmi::alu_lsr_imm_carry(op1, op2),
+        32          => (0, 0 != (op1 & (1 << 31))),
+        _           => (0, false),
+    }}
+    fn alu_asr_reg_carry(op1: i32, op2: u32, c: bool) -> (i32, bool) { match op2 {
+        0           => (op1, c),
+        x if x < 32 => Arm7Tdmi::alu_asr_imm_carry(op1, op2),
+        _           => (op1 >> 31, 0 != (op1 & (1 << 31))),
+    }}
+    fn alu_ror_reg_carry(op1: i32, op2: u32, c: bool) -> (i32, bool) { match op2 {
+        0  => (op1, c),
+        32 => (op1, 0 != (op1 & (1 << 31))),
+        x  => Arm7Tdmi::alu_ror_imm_carry(op1, op2 % 32),
+    }}
 }
 
 

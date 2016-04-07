@@ -37,6 +37,7 @@ use std::path::PathBuf;
 use std::ops::Range;
 use std::process;
 
+pub mod repl;
 pub mod logger;
 pub mod hardware;
 
@@ -166,6 +167,14 @@ fn main() {
     handle_oneshot_commands(&args, &gba);
 
     // Run REPL?
+    if args.run_repl {
+        if let Err(e) = repl::GbaRepl::new()
+                        .with_colour(args.colour)
+                        .run(&mut gba) {
+            error!("{}", e);
+        }
+    }
+
     if args.run_repl { if let Err(e) = run_gba_repl(&mut gba) {
         error!("{}", e);
     }}
@@ -370,21 +379,26 @@ fn configure_gba_from_command_line(gba: &mut hardware::Gba, args: &CmdLineArgs) 
 
 fn run_gba_repl(gba: &mut hardware::Gba) -> Result<(), hardware::GbaError> {
     use std::io::Write;
+    let mut terminal = term::stdout().expect("Failed grabbing a terminal handle!");
+    let mut diff = hardware::cpu::Arm7TdmiDiff::new();
     gba.cpu_arm7tdmi_mut().reset();
-    debug!("{}", gba.cpu_arm7tdmi());
+    diff.diff(gba.cpu_arm7tdmi());
+    diff.print(&mut terminal).unwrap_or(());
     let mut input = String::new();
     loop {
-        print!("\t[q = Quit, hex A..B = Hexdump Memory A..B]\n\t> ");
+        print!("\n\t[q = Quit, hex A..B = Hexdump Memory A..B]\n\t> ");
         std::io::stdout().flush().unwrap();
         input.clear();
         std::io::stdin().read_line(&mut input).unwrap();
         let mut s = input.trim().split_whitespace();
+        println!("");
 
         match s.next() {
             Some("q") => break,
             Some("") | None => {
                 try!(gba.cpu_arm7tdmi_mut().pipeline_step());
-                debug!("{}", gba.cpu_arm7tdmi());
+                diff.diff(gba.cpu_arm7tdmi());
+                diff.print(&mut terminal).unwrap_or(());
             },
             Some("hex") => { if let Some(r) = s.next() { do_hexdump(r, gba); } },
             _ => println!("\t\t<What?>"),

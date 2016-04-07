@@ -54,8 +54,8 @@ impl ArmBSOP {
     /// Gets the assembly name of the barrel shifter operation.
     pub fn name(&self) -> &'static str {
         match *self {
-            ArmBSOP::LSR_Imm(_) | ArmBSOP::LSR_Reg(_) | LSR_32 => "lsr",
-            ArmBSOP::ASR_Imm(_) | ArmBSOP::ASR_Reg(_) | ASR_32 => "asr",
+            ArmBSOP::LSR_Imm(_) | ArmBSOP::LSR_Reg(_) | ArmBSOP::LSR_32 => "lsr",
+            ArmBSOP::ASR_Imm(_) | ArmBSOP::ASR_Reg(_) | ArmBSOP::ASR_32 => "asr",
             ArmBSOP::LSL_Imm(_) | ArmBSOP::LSL_Reg(_) => "lsl",
             ArmBSOP::ROR_Imm(_) | ArmBSOP::ROR_Reg(_) => "ror",
             ArmBSOP::RRX => "rrx", ArmBSOP::NOP => "",

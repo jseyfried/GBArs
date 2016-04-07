@@ -216,7 +216,7 @@ impl fmt::Display for PSR {
 
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", if *self == State::ARM { "ARM" } else { "THUMB" })
+        write!(f, "{}", if *self == State::ARM { "-ARM-" } else { "THUMB" })
     }
 }
 
