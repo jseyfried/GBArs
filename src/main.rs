@@ -27,7 +27,7 @@
 extern crate log;
 extern crate argparse;
 extern crate byteorder;
-extern crate term;
+extern crate term_painter;
 
 #[cfg(test)]
 extern crate test;
@@ -40,7 +40,6 @@ use std::process;
 pub mod repl;
 pub mod logger;
 pub mod hardware;
-
 
 /// Set of values configurable by the command line.
 ///

@@ -9,8 +9,21 @@ use super::Arm7Tdmi;
 use super::psr::{PSR, State, Mode};
 use super::super::arminstruction::ArmInstruction;
 use super::super::thumbinstruction::ThumbInstruction;
-use std::io;
-use super::super::super::super::term;
+use super::super::super::super::term_painter::ToStyle;
+use super::super::super::super::term_painter::Color::*;
+use super::super::super::super::term_painter::Attr::Plain;
+
+macro_rules! print_diff {
+    ([$colour:expr, $new:expr, $old:expr], $x:ident -> $a:expr, $b:expr) => ({
+        let c = if $new.$x() { $a } else { $b };
+        if $new.$x() != $old.$x() { $colour.with(|| { print!("{}", c); }); }
+        else { print!("{}", c); }
+    });
+    ([$colour:expr, $new:expr, $old:expr], $x:ident) => (
+        if $new.$x() != $old.$x() { $colour.with(|| { print!(" {}", $new.$x()); }); }
+        else { print!(" {}", $new.$x()); }
+    );
+}
 
 /// A diff viewer for the ARM7TDMI.
 ///
@@ -37,12 +50,6 @@ pub struct Arm7TdmiDiff {
 }
 
 impl Arm7TdmiDiff {
-    /// The colour in which changed values will be shown.
-    pub const DIFF_COLOUR: term::color::Color = term::color::BRIGHT_YELLOW;
-
-    /// The colour in which head lines will appear.
-    pub const HEAD_COLOUR: term::color::Color = term::color::BRIGHT_BLUE;
-
     const DEBUG_REGISTER_NAMES: &'static [&'static str] = &[
         "R0:  ", "R1:  ", "R2:  ", "R3:  ", "R4:  ", "R5:  ", "R6:  ", "R7:  ",
         "R8:  ", "R9:  ", "R10: ", "R11: ", "R12: ", "SP:  ", "LR:  ", "PC:  "
@@ -93,100 +100,51 @@ impl Arm7TdmiDiff {
 
     /// Prints the current registers of an Arm7Tdmi where
     /// changed values are colourised.
-    pub fn print(&self, terminal: &mut Box<term::StdoutTerminal>) -> io::Result<()> {
-        terminal.reset().unwrap_or(());
-        Arm7TdmiDiff::colourise_head(terminal, self.colour);
-        try!(write!(terminal, "# Arm7Tdmi\n\t- Register Set"));
-        terminal.reset().unwrap_or(());
+    pub fn print(&self) {
+        let blue   = if self.colour { BrightBlue.to_style()   } else { Plain.to_style() };
+        let yellow = if self.colour { BrightYellow.to_style() } else { Plain.to_style() };
 
         // Write PSRs.
-        try!(write!(terminal, "\n\t\tCPSR: "));
-        try!(Arm7TdmiDiff::print_psr(terminal, self.cpsr_old, self.cpsr_new, self.colour));
-        try!(write!(terminal, "\tSPSR: "));
-        if self.cpsr_new.mode() == Mode::User { try!(write!(terminal, "[---- -- ----- ---]")); }
-        else { try!(Arm7TdmiDiff::print_psr(terminal, self.spsr_old, self.spsr_new, self.colour)); }
-        try!(write!(terminal, "\n"));
+        print!("{}\n\t\tCPSR: ", blue.paint("# Arm7Tdmi\n\t- Register Set"));
+        Arm7TdmiDiff::print_psr(self.cpsr_old, self.cpsr_new, self.colour);
+        print!("\tSPSR: ");
+        if self.cpsr_new.mode() == Mode::User { print!("[---- -- ----- ---]"); }
+        else { Arm7TdmiDiff::print_psr(self.spsr_old, self.spsr_new, self.colour); }
+        println!("");
 
         // Write GPRs.
         for i in 0..16 {
-            if (i % 4) == 0 { try!(write!(terminal, "\n\t\t")); }
-            try!(write!(terminal, "{}[", Arm7TdmiDiff::DEBUG_REGISTER_NAMES[i]));
-            if 0 != (self.gpr_new & (1 << i)) { Arm7TdmiDiff::colourise_diff(terminal, self.colour); }
-            try!(write!(terminal, "{:08X}", self.gpr[i]));
-            terminal.reset().unwrap_or(());
-            try!(write!(terminal, "]\t"));
+            if (i % 4) == 0 { print!("\n\t\t"); }
+            print!("{}[", Arm7TdmiDiff::DEBUG_REGISTER_NAMES[i]);
+            if 0 != (self.gpr_new & (1 << i)) { yellow.with(|| { print!("{:08X}", self.gpr[i]); }); }
+            else { print!("{:08X}", self.gpr[i]) }
+            print!("]\t");
         }
 
         // Write pipeline state.
-        Arm7TdmiDiff::colourise_head(terminal, self.colour);
-        try!(write!(terminal, "\n\n\t- Pipeline State"));
-        terminal.reset().unwrap_or(());
+        print!("{}", blue.paint("\n\n\t- Pipeline State"));
         if self.cpsr_new.state() == State::ARM {
-            try!(write!(terminal, "\n\t\tARM   Fetch:  {:#010X}\n\t\t\
-                                         ARM   Decode: {}\n", self.fetched_arm, self.decoded_arm));
+            println!("\n\t\tARM   Fetch:  {:#010X}\n\t\t\
+                            ARM   Decode: {}\n", self.fetched_arm, self.decoded_arm);
         } else {
-            try!(write!(terminal, "\n\t\tTHUMB Fetch:  {:#06X}\n\t\t\
-                                         THUMB Decode: {}\n", self.fetched_thumb, self.decoded_thumb));
+            println!("\n\t\tTHUMB Fetch:  {:#06X}\n\t\t\
+                            THUMB Decode: {}\n", self.fetched_thumb, self.decoded_thumb);
         }
-
-        terminal.reset().unwrap_or(());
-        write!(terminal, "\n")
     }
 
-    fn print_psr(terminal: &mut Box<term::StdoutTerminal>, old: PSR, new: PSR, colour: bool) -> io::Result<()> {
-        // TODO macro to simplify this code
-        try!(write!(terminal, "["));
-
-        // Write flags.
-        if new.N() != old.N() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.N() { 'N' } else { 'n' }));
-
-        if new.Z() != old.Z() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.Z() { 'Z' } else { 'z' }));
-
-        if new.C() != old.C() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.C() { 'C' } else { 'c' }));
-
-        if new.V() != old.V() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.V() { 'V' } else { 'v' }));
-
-        // Write interrupt flags.
-        try!(write!(terminal, " "));
-
-        if new.irq_disabled() != old.irq_disabled() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.irq_disabled() { 'I' } else { 'i' }));
-
-        if new.fiq_disabled() != old.fiq_disabled() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", if new.fiq_disabled() { 'F' } else { 'f' }));
-
-        // Write state and mode.
-        try!(write!(terminal, " "));
-
-        if new.state() != old.state() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{} ", new.state()));
-
-        if new.mode() != old.mode() { Arm7TdmiDiff::colourise_diff(terminal, colour); }
-        else { terminal.reset().unwrap_or(()); }
-        try!(write!(terminal, "{}", new.mode()));
-
-        // Done.
-        terminal.reset().unwrap_or(());
-        write!(terminal, "]")
-    }
-
-    fn colourise_diff(terminal: &mut Box<term::StdoutTerminal>, colour: bool) {
-        if colour { terminal.fg(Arm7TdmiDiff::DIFF_COLOUR).unwrap_or(()); }
-    }
-
-    fn colourise_head(terminal: &mut Box<term::StdoutTerminal>, colour: bool) {
-        if colour { terminal.fg(Arm7TdmiDiff::HEAD_COLOUR).unwrap_or(()); }
+    fn print_psr(old: PSR, new: PSR, colour: bool) {
+        let yellow = if colour { BrightYellow.to_style() } else { Plain.to_style() };
+        print!("[");
+        print_diff!([yellow, new, old], N -> 'N', 'n');
+        print_diff!([yellow, new, old], Z -> 'Z', 'z');
+        print_diff!([yellow, new, old], C -> 'C', 'c');
+        print_diff!([yellow, new, old], V -> 'V', 'v');
+        print!(" ");
+        print_diff!([yellow, new, old], irq_disabled -> 'I', 'i');
+        print_diff!([yellow, new, old], fiq_disabled -> 'F', 'f');
+        print_diff!([yellow, new, old], state);
+        print_diff!([yellow, new, old], mode);
+        print!("]");
     }
 }
 

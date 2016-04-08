@@ -20,11 +20,11 @@ And why GBA?
 """
 
 [dependencies]
-clippy    = { version = "^0.0.44", optional = true }
-log       = "^0.3"
-argparse  = "^0.2"
-byteorder = "^0.4"
-term      = "^0.4"
+clippy       = { version = "^0.0.44", optional = true }
+log          = "^0.3"
+argparse     = "^0.2"
+byteorder    = "^0.4"
+term-painter = "^0.2"
 
 [features]
 default = []
