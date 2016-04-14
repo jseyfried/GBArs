@@ -5,7 +5,7 @@
 #![cfg_attr(feature="clippy", warn(wrong_pub_self_convention))]
 #![warn(missing_docs)]
 
-use super::*;
+use super::Arm7Tdmi;
 
 pub use self::armdpop::*;
 pub use self::armbsop::*;
